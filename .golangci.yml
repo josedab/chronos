@@ -1,0 +1,95 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    # Default linters
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    # Code style
+    - gofmt
+    - goimports
+    - misspell
+    - unconvert
+    # Security
+    - gosec
+    # Performance
+    - prealloc
+    # Bug detection
+    - bodyclose
+    - contextcheck
+    - durationcheck
+    - errorlint
+    - exportloopref
+    - nilerr
+    - noctx
+    - unparam
+    # Code quality
+    - dupl
+    - gocritic
+    - revive
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  govet:
+    check-shadowing: true
+    enable-all: true
+  gofmt:
+    simplify: true
+  misspell:
+    locale: US
+  gosec:
+    excludes:
+      - G104 # Audit errors not checked
+      - G304 # File path provided as taint input
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - hugeParam
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: increment-decrement
+      - name: var-naming
+      - name: package-comments
+        disabled: true
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+  dupl:
+    threshold: 150
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
+        - unparam
+        - dupl
+        - gocritic
+    - path: cmd/
+      linters:
+        - unparam
+  max-issues-per-linter: 50
+  max-same-issues: 10

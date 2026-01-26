@@ -1,0 +1,122 @@
+# GoReleaser configuration
+# Documentation: https://goreleaser.com/customization/
+version: 1
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: chronos
+    main: ./cmd/chronos
+    binary: chronos
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.Commit}}
+      - -X main.BuildTime={{.Date}}
+
+  - id: chronosctl
+    main: ./cmd/chronosctl
+    binary: chronosctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.Commit}}
+      - -X main.BuildTime={{.Date}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+      - chronos.yaml.example
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: "Features"
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: "Bug Fixes"
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: "Performance"
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
+    - title: "Other"
+      order: 999
+
+dockers:
+  - image_templates:
+      - "ghcr.io/chronos/chronos:{{ .Version }}"
+      - "ghcr.io/chronos/chronos:{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/chronos/chronos:latest"
+    dockerfile: deployments/docker/Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    use: buildx
+
+release:
+  github:
+    owner: chronos
+    name: chronos
+  draft: false
+  prerelease: auto
+  name_template: "v{{ .Version }}"
+  footer: |
+    ## Docker Images
+
+    ```bash
+    docker pull ghcr.io/chronos/chronos:{{ .Version }}
+    ```
+
+    ## Helm Chart
+
+    ```bash
+    helm repo add chronos https://chronos.github.io/charts
+    helm install chronos chronos/chronos --version {{ .Version }}
+    ```
+
+announce:
+  skip: true

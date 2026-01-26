@@ -1,0 +1,41 @@
+# Build artifacts
+/build/
+/dist/
+
+# Test artifacts
+coverage.out
+coverage.html
+*.test
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+/vendor/
+
+# Data directories (local development)
+/data/
+*.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+
+# Web UI
+/web/node_modules/
+/web/dist/
+
+# Temporary files
+tmp/
+*.tmp
