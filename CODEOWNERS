@@ -1,0 +1,42 @@
+# CODEOWNERS - Automatic review assignment
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global owners (fallback for all files)
+* @chronos/maintainers
+
+# Core scheduler and storage
+/internal/scheduler/ @chronos/core
+/internal/storage/ @chronos/core
+/internal/raft/ @chronos/core
+
+# API and Web UI
+/internal/api/ @chronos/api
+/web/ @chronos/frontend
+
+# Cron parsing library
+/pkg/cron/ @chronos/core
+
+# Plugin system
+/pkg/plugin/ @chronos/plugins
+/pkg/executor/ @chronos/plugins
+
+# Next-gen features
+/internal/dag/ @chronos/core
+/internal/events/ @chronos/core
+/internal/chaos/ @chronos/core
+/internal/geo/ @chronos/core
+
+# DevOps and Infrastructure
+/deployments/ @chronos/devops
+/.github/ @chronos/devops
+/Makefile @chronos/devops
+/.goreleaser.yml @chronos/devops
+
+# Documentation
+/docs/ @chronos/docs
+/README.md @chronos/docs
+/CONTRIBUTING.md @chronos/docs
+/CHANGELOG.md @chronos/docs
+
+# CLI
+/cmd/chronosctl/ @chronos/cli
