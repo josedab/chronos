@@ -1,0 +1,22 @@
+{
+  "name": "daily-report-with-retry",
+  "schedule": "0 9 * * *",
+  "timezone": "America/New_York",
+  "webhook": {
+    "url": "https://api.example.com/reports/generate",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"type\": \"daily\", \"format\": \"pdf\"}"
+  },
+  "retry_policy": {
+    "max_attempts": 3,
+    "initial_interval": "10s",
+    "max_interval": "5m",
+    "multiplier": 2.0
+  },
+  "timeout": "10m",
+  "concurrency_policy": "forbid",
+  "enabled": true
+}

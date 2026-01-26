@@ -1,0 +1,49 @@
+# Example Jobs Configuration
+# Use with: chronosctl job create -f jobs.yaml
+
+jobs:
+  - name: cleanup-old-data
+    schedule: "0 3 * * *"
+    timezone: "UTC"
+    webhook:
+      url: "https://api.example.com/maintenance/cleanup"
+      method: "POST"
+      headers:
+        Authorization: "Bearer ${CLEANUP_API_TOKEN}"
+    timeout: "30m"
+    retry_policy:
+      max_attempts: 2
+      initial_interval: "1m"
+    enabled: true
+
+  - name: weekly-backup
+    schedule: "0 2 * * 0"
+    timezone: "America/Los_Angeles"
+    webhook:
+      url: "https://api.example.com/backup/full"
+      method: "POST"
+      headers:
+        Content-Type: "application/json"
+      body: '{"type": "full", "compress": true}'
+    timeout: "2h"
+    concurrency_policy: "forbid"
+    enabled: true
+
+  - name: heartbeat
+    schedule: "@every 30s"
+    webhook:
+      url: "https://uptime.example.com/ping/chronos"
+      method: "GET"
+    timeout: "10s"
+    retry_policy:
+      max_attempts: 1
+    enabled: true
+
+  - name: business-hours-sync
+    schedule: "0 * 9-17 * * 1-5"
+    timezone: "America/New_York"
+    webhook:
+      url: "https://api.example.com/sync"
+      method: "POST"
+    concurrency_policy: "replace"
+    enabled: true

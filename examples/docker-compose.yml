@@ -1,0 +1,61 @@
+# Chronos Development Environment
+# Usage: docker-compose up -d
+
+version: "3.8"
+
+services:
+  chronos:
+    build:
+      context: ..
+      dockerfile: deployments/docker/Dockerfile
+    ports:
+      - "8080:8080"   # HTTP API
+      - "7000:7000"   # Raft
+      - "9000:9000"   # Metrics
+    volumes:
+      - chronos-data:/var/lib/chronos
+      - ./chronos-dev.yaml:/etc/chronos/chronos.yaml:ro
+    environment:
+      - CHRONOS_LOG_LEVEL=debug
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # Example target service for testing webhooks
+  webhook-target:
+    image: hashicorp/http-echo:latest
+    command: ["-text=OK", "-listen=:5678"]
+    ports:
+      - "5678:5678"
+
+  # Prometheus for metrics collection (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    profiles:
+      - monitoring
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}  # Change in production
+    volumes:
+      - grafana-data:/var/lib/grafana
+    profiles:
+      - monitoring
+
+volumes:
+  chronos-data:
+  grafana-data:

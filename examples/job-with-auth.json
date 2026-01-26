@@ -1,0 +1,16 @@
+{
+  "name": "authenticated-webhook",
+  "schedule": "@hourly",
+  "webhook": {
+    "url": "https://api.example.com/secure/endpoint",
+    "method": "POST",
+    "headers": {
+      "Authorization": "Bearer your-api-token-here",
+      "X-API-Key": "your-api-key",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"action\": \"sync\"}"
+  },
+  "timeout": "5m",
+  "enabled": true
+}
