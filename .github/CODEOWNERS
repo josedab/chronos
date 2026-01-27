@@ -1,0 +1,35 @@
+# CODEOWNERS file for Chronos
+# These owners will be requested for review when someone opens a pull request
+# that modifies files they own.
+
+# Default owners for everything in the repo
+* @chronos/maintainers
+
+# Core scheduler and execution engine
+/internal/scheduler/ @chronos/core-team
+/internal/dispatcher/ @chronos/core-team
+/internal/raft/ @chronos/core-team
+
+# API and external interfaces
+/internal/api/ @chronos/api-team
+/pkg/cron/ @chronos/api-team
+
+# Storage layer
+/internal/storage/ @chronos/core-team
+
+# Web UI
+/web/ @chronos/frontend-team
+
+# Infrastructure and deployment
+/deployments/ @chronos/devops-team
+/.github/ @chronos/devops-team
+/Dockerfile @chronos/devops-team
+
+# Documentation
+/docs/ @chronos/docs-team
+*.md @chronos/docs-team
+
+# Configuration
+/internal/config/ @chronos/core-team
+*.yaml @chronos/devops-team
+*.yml @chronos/devops-team

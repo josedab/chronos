@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  helm:
+    name: Publish Helm Chart
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Update chart version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          sed -i "s/^version:.*/version: $VERSION/" deployments/helm/chronos/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"$VERSION\"/" deployments/helm/chronos/Chart.yaml
+
+      - name: Package Helm chart
+        run: |
+          helm package deployments/helm/chronos -d .cr-release-packages
+
+      - name: Upload chart to GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: .cr-release-packages/*.tgz
