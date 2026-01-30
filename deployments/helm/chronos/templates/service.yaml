@@ -1,0 +1,34 @@
+# Headless service for Raft communication
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chronos.fullname" . }}-headless
+  labels:
+    {{- include "chronos.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: {{ .Values.service.raftPort }}
+      targetPort: raft
+      protocol: TCP
+      name: raft
+  selector:
+    {{- include "chronos.selectorLabels" . | nindent 4 }}
+---
+# Client service for API access
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chronos.fullname" . }}
+  labels:
+    {{- include "chronos.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "chronos.selectorLabels" . | nindent 4 }}

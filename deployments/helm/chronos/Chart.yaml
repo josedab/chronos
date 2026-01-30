@@ -1,0 +1,14 @@
+apiVersion: v2
+name: chronos
+description: A Helm chart for Chronos distributed cron system
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - cron
+  - scheduler
+  - distributed
+  - raft
+home: https://github.com/chronos/chronos
+maintainers:
+  - name: Chronos Team
