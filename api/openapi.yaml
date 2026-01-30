@@ -1,0 +1,2147 @@
+openapi: 3.1.0
+info:
+  title: Chronos API
+  description: |
+    Chronos is a distributed cron system for scheduling and orchestrating jobs at scale.
+    This API provides endpoints for managing jobs, workflows, policies, namespaces, and more.
+  version: 3.0.0
+  contact:
+    name: Chronos Team
+    url: https://github.com/chronos/chronos
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.chronos.io/v1
+    description: Production server
+  - url: https://staging-api.chronos.io/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Local development
+
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
+
+tags:
+  - name: Jobs
+    description: Job management operations
+  - name: Workflows
+    description: Workflow orchestration operations
+  - name: Policies
+    description: Policy-as-code operations
+  - name: Namespaces
+    description: Multi-tenancy namespace operations
+  - name: Executions
+    description: Job execution operations
+  - name: Assistant
+    description: LLM-powered assistant operations
+  - name: Marketplace
+    description: Workflow marketplace operations
+  - name: RBAC
+    description: Role-based access control operations
+  - name: Compliance
+    description: Compliance and audit operations
+  - name: Cost
+    description: Cost optimization operations
+  - name: Search
+    description: Semantic search operations
+  - name: Events
+    description: Event mesh operations
+  - name: Chaos
+    description: Chaos testing operations
+
+paths:
+  # Jobs
+  /jobs:
+    get:
+      tags: [Jobs]
+      summary: List all jobs
+      operationId: listJobs
+      parameters:
+        - $ref: '#/components/parameters/NamespaceParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+        - name: tags
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        '200':
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Jobs]
+      summary: Create a new job
+      operationId: createJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobCreate'
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /jobs/{jobId}:
+    get:
+      tags: [Jobs]
+      summary: Get a job by ID
+      operationId: getJob
+      parameters:
+        - $ref: '#/components/parameters/JobIdParam'
+      responses:
+        '200':
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Jobs]
+      summary: Update a job
+      operationId: updateJob
+      parameters:
+        - $ref: '#/components/parameters/JobIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobUpdate'
+      responses:
+        '200':
+          description: Job updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Jobs]
+      summary: Delete a job
+      operationId: deleteJob
+      parameters:
+        - $ref: '#/components/parameters/JobIdParam'
+      responses:
+        '204':
+          description: Job deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /jobs/{jobId}/execute:
+    post:
+      tags: [Jobs, Executions]
+      summary: Manually trigger a job execution
+      operationId: executeJob
+      parameters:
+        - $ref: '#/components/parameters/JobIdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionRequest'
+      responses:
+        '202':
+          description: Execution triggered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+
+  /jobs/{jobId}/executions:
+    get:
+      tags: [Jobs, Executions]
+      summary: List executions for a job
+      operationId: listJobExecutions
+      parameters:
+        - $ref: '#/components/parameters/JobIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ExecutionStatus'
+      responses:
+        '200':
+          description: List of executions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionList'
+
+  # Workflows
+  /workflows:
+    get:
+      tags: [Workflows]
+      summary: List all workflows
+      operationId: listWorkflows
+      parameters:
+        - $ref: '#/components/parameters/NamespaceParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of workflows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowList'
+
+    post:
+      tags: [Workflows]
+      summary: Create a new workflow
+      operationId: createWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowCreate'
+      responses:
+        '201':
+          description: Workflow created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+
+  /workflows/{workflowId}:
+    get:
+      tags: [Workflows]
+      summary: Get a workflow by ID
+      operationId: getWorkflow
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdParam'
+      responses:
+        '200':
+          description: Workflow details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+
+    put:
+      tags: [Workflows]
+      summary: Update a workflow
+      operationId: updateWorkflow
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowUpdate'
+      responses:
+        '200':
+          description: Workflow updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+
+    delete:
+      tags: [Workflows]
+      summary: Delete a workflow
+      operationId: deleteWorkflow
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdParam'
+      responses:
+        '204':
+          description: Workflow deleted
+
+  /workflows/{workflowId}/execute:
+    post:
+      tags: [Workflows]
+      summary: Execute a workflow
+      operationId: executeWorkflow
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowExecutionRequest'
+      responses:
+        '202':
+          description: Workflow execution started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowExecution'
+
+  # Policies
+  /policies:
+    get:
+      tags: [Policies]
+      summary: List all policies
+      operationId: listPolicies
+      parameters:
+        - $ref: '#/components/parameters/NamespaceParam'
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/PolicyType'
+      responses:
+        '200':
+          description: List of policies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyList'
+
+    post:
+      tags: [Policies]
+      summary: Create a new policy
+      operationId: createPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyCreate'
+      responses:
+        '201':
+          description: Policy created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+
+  /policies/{policyId}:
+    get:
+      tags: [Policies]
+      summary: Get a policy by ID
+      operationId: getPolicy
+      parameters:
+        - $ref: '#/components/parameters/PolicyIdParam'
+      responses:
+        '200':
+          description: Policy details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+
+    put:
+      tags: [Policies]
+      summary: Update a policy
+      operationId: updatePolicy
+      parameters:
+        - $ref: '#/components/parameters/PolicyIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyUpdate'
+      responses:
+        '200':
+          description: Policy updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+
+    delete:
+      tags: [Policies]
+      summary: Delete a policy
+      operationId: deletePolicy
+      parameters:
+        - $ref: '#/components/parameters/PolicyIdParam'
+      responses:
+        '204':
+          description: Policy deleted
+
+  # Namespaces
+  /namespaces:
+    get:
+      tags: [Namespaces]
+      summary: List all namespaces
+      operationId: listNamespaces
+      responses:
+        '200':
+          description: List of namespaces
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamespaceList'
+
+    post:
+      tags: [Namespaces]
+      summary: Create a new namespace
+      operationId: createNamespace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamespaceCreate'
+      responses:
+        '201':
+          description: Namespace created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Namespace'
+
+  /namespaces/{namespaceId}:
+    get:
+      tags: [Namespaces]
+      summary: Get a namespace by ID
+      operationId: getNamespace
+      parameters:
+        - $ref: '#/components/parameters/NamespaceIdParam'
+      responses:
+        '200':
+          description: Namespace details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Namespace'
+
+    delete:
+      tags: [Namespaces]
+      summary: Delete a namespace
+      operationId: deleteNamespace
+      parameters:
+        - $ref: '#/components/parameters/NamespaceIdParam'
+      responses:
+        '204':
+          description: Namespace deleted
+
+  # Assistant
+  /assistant/chat:
+    post:
+      tags: [Assistant]
+      summary: Chat with the LLM assistant
+      operationId: chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Chat response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+
+  /assistant/parse:
+    post:
+      tags: [Assistant]
+      summary: Parse natural language to job specification
+      operationId: parseNaturalLanguage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParseRequest'
+      responses:
+        '200':
+          description: Parsed job specification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobSpec'
+
+  /assistant/troubleshoot:
+    post:
+      tags: [Assistant]
+      summary: Get troubleshooting suggestions
+      operationId: troubleshoot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TroubleshootRequest'
+      responses:
+        '200':
+          description: Troubleshooting suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TroubleshootResponse'
+
+  /assistant/generate-workflow:
+    post:
+      tags: [Assistant]
+      summary: Generate workflow from description
+      operationId: generateWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateWorkflowRequest'
+      responses:
+        '200':
+          description: Generated workflow
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+
+  # Marketplace
+  /marketplace/templates:
+    get:
+      tags: [Marketplace]
+      summary: List workflow templates
+      operationId: listTemplates
+      parameters:
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/WorkflowCategory'
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateList'
+
+  /marketplace/templates/{templateId}:
+    get:
+      tags: [Marketplace]
+      summary: Get a template by ID
+      operationId: getTemplate
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Template details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowTemplate'
+
+  /marketplace/templates/{templateId}/instantiate:
+    post:
+      tags: [Marketplace]
+      summary: Create a workflow from a template
+      operationId: instantiateTemplate
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstantiateRequest'
+      responses:
+        '201':
+          description: Workflow created from template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+
+  # Search
+  /search:
+    post:
+      tags: [Search]
+      summary: Semantic search for jobs
+      operationId: search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResults'
+
+  /search/autocomplete:
+    get:
+      tags: [Search]
+      summary: Autocomplete suggestions
+      operationId: autocomplete
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: Autocomplete suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutocompleteResults'
+
+  # RBAC
+  /rbac/roles:
+    get:
+      tags: [RBAC]
+      summary: List all roles
+      operationId: listRoles
+      responses:
+        '200':
+          description: List of roles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleList'
+
+    post:
+      tags: [RBAC]
+      summary: Create a new role
+      operationId: createRole
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleCreate'
+      responses:
+        '201':
+          description: Role created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+
+  /rbac/users/{userId}/roles:
+    get:
+      tags: [RBAC]
+      summary: Get roles for a user
+      operationId: getUserRoles
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User roles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleAssignmentList'
+
+    post:
+      tags: [RBAC]
+      summary: Assign a role to a user
+      operationId: assignRole
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleAssignment'
+      responses:
+        '201':
+          description: Role assigned
+
+  # Compliance
+  /compliance/reports:
+    get:
+      tags: [Compliance]
+      summary: List compliance reports
+      operationId: listComplianceReports
+      parameters:
+        - name: framework
+          in: query
+          schema:
+            $ref: '#/components/schemas/ComplianceFramework'
+      responses:
+        '200':
+          description: List of reports
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceReportList'
+
+    post:
+      tags: [Compliance]
+      summary: Generate a compliance report
+      operationId: generateComplianceReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceReportRequest'
+      responses:
+        '202':
+          description: Report generation started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceReport'
+
+  /compliance/audit-logs:
+    get:
+      tags: [Compliance]
+      summary: Query audit logs
+      operationId: queryAuditLogs
+      parameters:
+        - name: actor
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogList'
+
+  # Cost
+  /cost/predict:
+    post:
+      tags: [Cost]
+      summary: Predict execution cost
+      operationId: predictCost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CostPredictionRequest'
+      responses:
+        '200':
+          description: Cost prediction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostPrediction'
+
+  /cost/recommendations:
+    get:
+      tags: [Cost]
+      summary: Get cost optimization recommendations
+      operationId: getRecommendations
+      responses:
+        '200':
+          description: List of recommendations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationList'
+
+  /cost/reports:
+    get:
+      tags: [Cost]
+      summary: Get cost report
+      operationId: getCostReport
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Cost report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostReport'
+
+  /cost/budgets:
+    get:
+      tags: [Cost]
+      summary: List budgets
+      operationId: listBudgets
+      responses:
+        '200':
+          description: List of budgets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetList'
+
+    post:
+      tags: [Cost]
+      summary: Create a budget
+      operationId: createBudget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetCreate'
+      responses:
+        '201':
+          description: Budget created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Budget'
+
+  # Events
+  /events/triggers:
+    get:
+      tags: [Events]
+      summary: List event triggers
+      operationId: listTriggers
+      responses:
+        '200':
+          description: List of triggers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerList'
+
+    post:
+      tags: [Events]
+      summary: Create an event trigger
+      operationId: createTrigger
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerCreate'
+      responses:
+        '201':
+          description: Trigger created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trigger'
+
+  # Chaos
+  /chaos/gamedays:
+    get:
+      tags: [Chaos]
+      summary: List game days
+      operationId: listGameDays
+      responses:
+        '200':
+          description: List of game days
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameDayList'
+
+    post:
+      tags: [Chaos]
+      summary: Create a game day
+      operationId: createGameDay
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GameDayCreate'
+      responses:
+        '201':
+          description: Game day created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameDay'
+
+  /chaos/gamedays/{gameDayId}/start:
+    post:
+      tags: [Chaos]
+      summary: Start a game day
+      operationId: startGameDay
+      parameters:
+        - name: gameDayId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: Game day started
+
+  /chaos/gamedays/{gameDayId}/abort:
+    post:
+      tags: [Chaos]
+      summary: Abort a game day
+      operationId: abortGameDay
+      parameters:
+        - name: gameDayId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Game day aborted
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  parameters:
+    JobIdParam:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Job ID
+
+    WorkflowIdParam:
+      name: workflowId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Workflow ID
+
+    PolicyIdParam:
+      name: policyId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Policy ID
+
+    NamespaceIdParam:
+      name: namespaceId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Namespace ID
+
+    NamespaceParam:
+      name: namespace
+      in: query
+      schema:
+        type: string
+      description: Filter by namespace
+
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      description: Page number
+
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      description: Items per page
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+    # Jobs
+    Job:
+      type: object
+      required:
+        - id
+        - name
+        - schedule
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        schedule:
+          type: string
+          description: Cron expression
+        timezone:
+          type: string
+          default: UTC
+        enabled:
+          type: boolean
+          default: true
+        namespace:
+          type: string
+        webhook:
+          $ref: '#/components/schemas/Webhook'
+        retryPolicy:
+          $ref: '#/components/schemas/RetryPolicy'
+        timeout:
+          type: string
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    JobCreate:
+      type: object
+      required:
+        - name
+        - schedule
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        schedule:
+          type: string
+        timezone:
+          type: string
+        enabled:
+          type: boolean
+        namespace:
+          type: string
+        webhook:
+          $ref: '#/components/schemas/Webhook'
+        retryPolicy:
+          $ref: '#/components/schemas/RetryPolicy'
+        timeout:
+          type: string
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+
+    JobUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        schedule:
+          type: string
+        timezone:
+          type: string
+        enabled:
+          type: boolean
+        webhook:
+          $ref: '#/components/schemas/Webhook'
+        retryPolicy:
+          $ref: '#/components/schemas/RetryPolicy'
+        timeout:
+          type: string
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+
+    JobList:
+      type: object
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Job'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    Webhook:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+        method:
+          type: string
+          enum: [GET, POST, PUT, DELETE]
+          default: POST
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        body:
+          type: string
+
+    RetryPolicy:
+      type: object
+      properties:
+        maxAttempts:
+          type: integer
+          default: 3
+        initialInterval:
+          type: string
+          default: 1s
+        maxInterval:
+          type: string
+          default: 1m
+        multiplier:
+          type: number
+          default: 2.0
+
+    # Executions
+    Execution:
+      type: object
+      properties:
+        id:
+          type: string
+        jobId:
+          type: string
+        status:
+          $ref: '#/components/schemas/ExecutionStatus'
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        duration:
+          type: string
+        output:
+          type: string
+        error:
+          type: string
+        attempts:
+          type: integer
+
+    ExecutionStatus:
+      type: string
+      enum: [pending, running, succeeded, failed, cancelled]
+
+    ExecutionList:
+      type: object
+      properties:
+        executions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Execution'
+        total:
+          type: integer
+
+    ExecutionRequest:
+      type: object
+      properties:
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+
+    # Workflows
+    Workflow:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        namespace:
+          type: string
+        enabled:
+          type: boolean
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowStep'
+        triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowTrigger'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WorkflowStep:
+      type: object
+      required:
+        - id
+        - name
+        - type
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [job, http, condition, parallel, delay, approval, notification]
+        jobId:
+          type: string
+        dependsOn:
+          type: array
+          items:
+            type: string
+        condition:
+          type: string
+        timeout:
+          type: string
+        config:
+          type: object
+
+    WorkflowTrigger:
+      type: object
+      required:
+        - type
+        - name
+      properties:
+        type:
+          type: string
+          enum: [cron, webhook, manual, event]
+        name:
+          type: string
+        schedule:
+          type: string
+        enabled:
+          type: boolean
+        config:
+          type: object
+
+    WorkflowCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        namespace:
+          type: string
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowStep'
+        triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowTrigger'
+
+    WorkflowUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowStep'
+        triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowTrigger'
+
+    WorkflowList:
+      type: object
+      properties:
+        workflows:
+          type: array
+          items:
+            $ref: '#/components/schemas/Workflow'
+        total:
+          type: integer
+
+    WorkflowExecution:
+      type: object
+      properties:
+        id:
+          type: string
+        workflowId:
+          type: string
+        status:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        stepStatuses:
+          type: object
+          additionalProperties:
+            type: string
+
+    WorkflowExecutionRequest:
+      type: object
+      properties:
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+
+    # Policies
+    Policy:
+      type: object
+      required:
+        - id
+        - name
+        - type
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: '#/components/schemas/PolicyType'
+        namespace:
+          type: string
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyRule'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyAction'
+
+    PolicyType:
+      type: string
+      enum: [scheduling, resource, security, compliance]
+
+    PolicyRule:
+      type: object
+      required:
+        - field
+        - operator
+        - value
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum: [eq, ne, in, not_in, matches, gt, lt, gte, lte]
+        value:
+          type: string
+
+    PolicyAction:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [set_label, add_resource, set_timeout, notify, block, allow]
+        config:
+          type: object
+
+    PolicyCreate:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: '#/components/schemas/PolicyType'
+        namespace:
+          type: string
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyRule'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyAction'
+
+    PolicyUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyRule'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyAction'
+
+    PolicyList:
+      type: object
+      properties:
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Policy'
+        total:
+          type: integer
+
+    # Namespaces
+    Namespace:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        maxJobs:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    NamespaceCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        maxJobs:
+          type: integer
+
+    NamespaceList:
+      type: object
+      properties:
+        namespaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/Namespace'
+        total:
+          type: integer
+
+    # Assistant
+    ChatRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+        sessionId:
+          type: string
+        context:
+          type: object
+
+    ChatResponse:
+      type: object
+      properties:
+        response:
+          type: string
+        sessionId:
+          type: string
+        suggestions:
+          type: array
+          items:
+            type: string
+
+    ParseRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+
+    JobSpec:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        schedule:
+          type: string
+        timezone:
+          type: string
+        webhook:
+          $ref: '#/components/schemas/Webhook'
+
+    TroubleshootRequest:
+      type: object
+      required:
+        - jobId
+      properties:
+        jobId:
+          type: string
+        error:
+          type: string
+        logs:
+          type: string
+
+    TroubleshootResponse:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: string
+        possibleCauses:
+          type: array
+          items:
+            type: string
+        recommendedActions:
+          type: array
+          items:
+            type: string
+
+    GenerateWorkflowRequest:
+      type: object
+      required:
+        - description
+      properties:
+        description:
+          type: string
+
+    # Marketplace
+    WorkflowTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/WorkflowCategory'
+        author:
+          type: string
+        version:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        downloads:
+          type: integer
+        rating:
+          type: number
+
+    WorkflowCategory:
+      type: string
+      enum: [etl, ci_cd, monitoring, maintenance, reporting, incident_response]
+
+    TemplateList:
+      type: object
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowTemplate'
+        total:
+          type: integer
+
+    InstantiateRequest:
+      type: object
+      required:
+        - variables
+      properties:
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        namespace:
+          type: string
+
+    # Search
+    SearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+        filters:
+          type: object
+          additionalProperties:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        maxResults:
+          type: integer
+          default: 20
+
+    SearchResults:
+      type: object
+      properties:
+        hits:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchHit'
+        total:
+          type: integer
+        took:
+          type: integer
+
+    SearchHit:
+      type: object
+      properties:
+        jobId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        score:
+          type: number
+        highlights:
+          type: object
+
+    AutocompleteResults:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string
+              score:
+                type: number
+
+    # RBAC
+    Role:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+
+    RoleCreate:
+      type: object
+      required:
+        - name
+        - permissions
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+
+    RoleList:
+      type: object
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+
+    RoleAssignment:
+      type: object
+      required:
+        - roleName
+      properties:
+        roleName:
+          type: string
+        namespace:
+          type: string
+
+    RoleAssignmentList:
+      type: object
+      properties:
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleAssignment'
+
+    # Compliance
+    ComplianceFramework:
+      type: string
+      enum: [SOC2, HIPAA, GDPR, PCI_DSS, ISO_27001]
+
+    ComplianceReport:
+      type: object
+      properties:
+        id:
+          type: string
+        framework:
+          $ref: '#/components/schemas/ComplianceFramework'
+        status:
+          type: string
+        score:
+          type: number
+        controls:
+          type: array
+          items:
+            type: object
+        generatedAt:
+          type: string
+          format: date-time
+
+    ComplianceReportRequest:
+      type: object
+      required:
+        - framework
+      properties:
+        framework:
+          $ref: '#/components/schemas/ComplianceFramework'
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+
+    ComplianceReportList:
+      type: object
+      properties:
+        reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceReport'
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        actor:
+          type: string
+        action:
+          type: string
+        resource:
+          type: string
+        details:
+          type: object
+        ipAddress:
+          type: string
+
+    AuditLogList:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogEntry'
+        total:
+          type: integer
+
+    # Cost
+    CostPredictionRequest:
+      type: object
+      required:
+        - jobId
+      properties:
+        jobId:
+          type: string
+        instanceType:
+          type: string
+        region:
+          type: string
+        estimatedDuration:
+          type: string
+        retryable:
+          type: boolean
+
+    CostPrediction:
+      type: object
+      properties:
+        jobId:
+          type: string
+        onDemandCost:
+          type: number
+        spotCost:
+          type: number
+        spotAvailable:
+          type: boolean
+        recommendSpot:
+          type: boolean
+        savings:
+          type: number
+        confidence:
+          type: number
+
+    Recommendation:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        severity:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        savings:
+          type: number
+        confidence:
+          type: number
+
+    RecommendationList:
+      type: object
+      properties:
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recommendation'
+
+    CostReport:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        totalCost:
+          type: number
+        totalSavings:
+          type: number
+        costByJob:
+          type: object
+          additionalProperties:
+            type: number
+        costByNamespace:
+          type: object
+          additionalProperties:
+            type: number
+
+    Budget:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        amount:
+          type: number
+        period:
+          type: string
+          enum: [daily, weekly, monthly]
+        currentSpend:
+          type: number
+        alertThreshold:
+          type: number
+
+    BudgetCreate:
+      type: object
+      required:
+        - name
+        - amount
+        - period
+      properties:
+        name:
+          type: string
+        namespace:
+          type: string
+        amount:
+          type: number
+        period:
+          type: string
+          enum: [daily, weekly, monthly]
+        alertThreshold:
+          type: number
+
+    BudgetList:
+      type: object
+      properties:
+        budgets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Budget'
+
+    # Events
+    Trigger:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        eventType:
+          type: string
+        source:
+          type: string
+        jobId:
+          type: string
+        filter:
+          type: string
+        enabled:
+          type: boolean
+
+    TriggerCreate:
+      type: object
+      required:
+        - name
+        - eventType
+        - jobId
+      properties:
+        name:
+          type: string
+        eventType:
+          type: string
+        source:
+          type: string
+        jobId:
+          type: string
+        filter:
+          type: string
+        enabled:
+          type: boolean
+
+    TriggerList:
+      type: object
+      properties:
+        triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Trigger'
+
+    # Chaos
+    GameDay:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, running, paused, completed, aborted]
+        experiments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Experiment'
+        participants:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    GameDayCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        objectives:
+          type: array
+          items:
+            type: string
+        experiments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Experiment'
+        participants:
+          type: array
+          items:
+            type: string
+
+    GameDayList:
+      type: object
+      properties:
+        gameDays:
+          type: array
+          items:
+            $ref: '#/components/schemas/GameDay'
+
+    Experiment:
+      type: object
+      required:
+        - name
+        - type
+        - targetScope
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [pod_kill, latency, cpu_stress, memory_stress, network_partition, disk_fill]
+        targetScope:
+          type: string
+        duration:
+          type: string
+        config:
+          type: object
