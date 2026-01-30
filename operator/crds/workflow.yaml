@@ -1,0 +1,219 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: workflows.chronos.io
+  annotations:
+    crossplane.io/external-name: chronos-workflow
+spec:
+  group: chronos.io
+  names:
+    kind: Workflow
+    listKind: WorkflowList
+    plural: workflows
+    singular: workflow
+    shortNames:
+      - cwf
+    categories:
+      - chronos
+      - crossplane
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Steps
+          type: integer
+          jsonPath: .status.atProvider.stepCount
+        - name: Enabled
+          type: boolean
+          jsonPath: .spec.forProvider.enabled
+        - name: Last Run
+          type: date
+          jsonPath: .status.atProvider.lastRunTime
+        - name: Status
+          type: string
+          jsonPath: .status.atProvider.lastRunStatus
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - forProvider
+              properties:
+                forProvider:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: Name of the workflow
+                    description:
+                      type: string
+                      description: Description of the workflow
+                    namespace:
+                      type: string
+                      description: Chronos namespace
+                    enabled:
+                      type: boolean
+                      default: true
+                    steps:
+                      type: array
+                      description: Workflow steps
+                      items:
+                        type: object
+                        required:
+                          - id
+                          - name
+                          - type
+                        properties:
+                          id:
+                            type: string
+                            description: Unique step ID
+                          name:
+                            type: string
+                            description: Display name
+                          type:
+                            type: string
+                            enum: [job, http, condition, parallel, delay, approval, notification, script, transform]
+                          jobRef:
+                            type: object
+                            description: Reference to a Job resource
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                          config:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                            description: Step configuration
+                          dependsOn:
+                            type: array
+                            items:
+                              type: string
+                            description: Step IDs this step depends on
+                          condition:
+                            type: string
+                            description: Condition expression
+                          timeout:
+                            type: string
+                            description: Step timeout
+                          retryPolicy:
+                            type: object
+                            properties:
+                              maxAttempts:
+                                type: integer
+                              initialInterval:
+                                type: string
+                              maxInterval:
+                                type: string
+                              multiplier:
+                                type: number
+                          onSuccess:
+                            type: array
+                            items:
+                              type: string
+                          onFailure:
+                            type: array
+                            items:
+                              type: string
+                    triggers:
+                      type: array
+                      description: Workflow triggers
+                      items:
+                        type: object
+                        required:
+                          - type
+                          - name
+                        properties:
+                          type:
+                            type: string
+                            enum: [cron, webhook, manual, event]
+                          name:
+                            type: string
+                          schedule:
+                            type: string
+                            description: Cron schedule (for cron triggers)
+                          enabled:
+                            type: boolean
+                            default: true
+                          config:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                    timeout:
+                      type: string
+                      description: Overall workflow timeout
+                      default: 1h
+                    labels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                providerConfigRef:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                writeConnectionSecretToRef:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+            status:
+              type: object
+              properties:
+                atProvider:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    stepCount:
+                      type: integer
+                    lastRunTime:
+                      type: string
+                      format: date-time
+                    lastRunStatus:
+                      type: string
+                      enum: [pending, running, succeeded, failed, cancelled]
+                    nextRunTime:
+                      type: string
+                      format: date-time
+                    totalRuns:
+                      type: integer
+                    successfulRuns:
+                      type: integer
+                    failedRuns:
+                      type: integer
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string

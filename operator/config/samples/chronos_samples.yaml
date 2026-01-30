@@ -1,0 +1,144 @@
+# Example: Simple ChronosJob
+apiVersion: chronos.io/v1alpha1
+kind: ChronosJob
+metadata:
+  name: daily-backup
+  namespace: default
+spec:
+  name: daily-backup
+  description: Daily database backup job
+  schedule: "0 2 * * *"
+  timezone: America/New_York
+  enabled: true
+  webhook:
+    url: https://api.example.com/backup
+    method: POST
+    headers:
+      Content-Type: application/json
+    body: |
+      {"type": "full", "compress": true}
+  timeout: "30m"
+  concurrency: forbid
+  retryPolicy:
+    maxAttempts: 3
+    initialInterval: "30s"
+    maxInterval: "5m"
+    multiplier: 2
+---
+# Example: ChronosJob with secret reference
+apiVersion: chronos.io/v1alpha1
+kind: ChronosJob
+metadata:
+  name: api-sync
+  namespace: default
+spec:
+  name: api-sync
+  schedule: "*/15 * * * *"
+  webhook:
+    url: https://api.example.com/sync
+    method: POST
+    secretRef:
+      name: api-credentials
+      key: token
+  timeout: "5m"
+  concurrency: allow
+---
+# Example: ChronosDAG workflow
+apiVersion: chronos.io/v1alpha1
+kind: ChronosDAG
+metadata:
+  name: etl-pipeline
+  namespace: default
+spec:
+  name: etl-pipeline
+  description: Daily ETL pipeline
+  schedule: "0 1 * * *"
+  timezone: UTC
+  nodes:
+    - id: extract
+      jobRef:
+        name: extract-job
+      condition: none
+    - id: transform
+      jobRef:
+        name: transform-job
+      dependencies:
+        - extract
+      condition: all_success
+      timeout: "10m"
+    - id: load
+      jobRef:
+        name: load-job
+      dependencies:
+        - transform
+      condition: all_success
+    - id: notify
+      jobRef:
+        name: notify-job
+      dependencies:
+        - load
+      condition: all_complete
+---
+# Example: ChronosTrigger with Kafka
+apiVersion: chronos.io/v1alpha1
+kind: ChronosTrigger
+metadata:
+  name: order-processor
+  namespace: default
+spec:
+  name: order-processor
+  type: kafka
+  jobRef:
+    name: process-order
+  enabled: true
+  kafka:
+    brokers:
+      - kafka-0.kafka:9092
+      - kafka-1.kafka:9092
+    topic: orders
+    consumerGroup: chronos-orders
+  filter:
+    eventTypes:
+      - order.created
+      - order.updated
+---
+# Example: ChronosTrigger with SQS
+apiVersion: chronos.io/v1alpha1
+kind: ChronosTrigger
+metadata:
+  name: s3-file-processor
+  namespace: default
+spec:
+  name: s3-file-processor
+  type: sqs
+  jobRef:
+    name: process-file
+  enabled: true
+  sqs:
+    queueURL: https://sqs.us-east-1.amazonaws.com/123456789/file-uploads
+    region: us-east-1
+    credentialsSecretRef:
+      name: aws-credentials
+      key: credentials
+---
+# Example: ChronosTrigger with webhook
+apiVersion: chronos.io/v1alpha1
+kind: ChronosTrigger
+metadata:
+  name: github-webhook
+  namespace: default
+spec:
+  name: github-webhook
+  type: webhook
+  jobRef:
+    name: ci-pipeline
+  enabled: true
+  webhook:
+    path: /webhooks/github
+    secretRef:
+      name: github-webhook-secret
+      key: secret
+  filter:
+    eventTypes:
+      - push
+      - pull_request

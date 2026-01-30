@@ -1,0 +1,186 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: jobs.chronos.io
+  annotations:
+    crossplane.io/external-name: chronos-job
+spec:
+  group: chronos.io
+  names:
+    kind: Job
+    listKind: JobList
+    plural: jobs
+    singular: job
+    shortNames:
+      - cj
+    categories:
+      - chronos
+      - crossplane
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Schedule
+          type: string
+          jsonPath: .spec.forProvider.schedule
+        - name: Enabled
+          type: boolean
+          jsonPath: .spec.forProvider.enabled
+        - name: Last Run
+          type: date
+          jsonPath: .status.atProvider.lastRunTime
+        - name: Status
+          type: string
+          jsonPath: .status.atProvider.lastRunStatus
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - forProvider
+              properties:
+                forProvider:
+                  type: object
+                  required:
+                    - name
+                    - schedule
+                  properties:
+                    name:
+                      type: string
+                      description: Name of the job
+                    description:
+                      type: string
+                      description: Description of the job
+                    schedule:
+                      type: string
+                      description: Cron expression for the schedule
+                      pattern: '^(\*|([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])|\*\/([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])) (\*|([0-9]|1[0-9]|2[0-3])|\*\/([0-9]|1[0-9]|2[0-3])) (\*|([1-9]|1[0-9]|2[0-9]|3[0-1])|\*\/([1-9]|1[0-9]|2[0-9]|3[0-1])) (\*|([1-9]|1[0-2])|\*\/([1-9]|1[0-2])) (\*|([0-6])|\*\/([0-6]))$'
+                    timezone:
+                      type: string
+                      description: Timezone for the schedule
+                      default: UTC
+                    enabled:
+                      type: boolean
+                      description: Whether the job is enabled
+                      default: true
+                    namespace:
+                      type: string
+                      description: Chronos namespace for the job
+                    webhook:
+                      type: object
+                      description: Webhook configuration
+                      required:
+                        - url
+                      properties:
+                        url:
+                          type: string
+                          format: uri
+                          description: Webhook URL
+                        method:
+                          type: string
+                          enum: [GET, POST, PUT, DELETE]
+                          default: POST
+                        headers:
+                          type: object
+                          additionalProperties:
+                            type: string
+                          description: HTTP headers
+                        body:
+                          type: string
+                          description: Request body template
+                    retryPolicy:
+                      type: object
+                      description: Retry policy configuration
+                      properties:
+                        maxAttempts:
+                          type: integer
+                          minimum: 1
+                          maximum: 10
+                          default: 3
+                        initialInterval:
+                          type: string
+                          default: 1s
+                        maxInterval:
+                          type: string
+                          default: 1m
+                        multiplier:
+                          type: number
+                          default: 2.0
+                    timeout:
+                      type: string
+                      description: Job timeout
+                      default: 30m
+                    tags:
+                      type: object
+                      additionalProperties:
+                        type: string
+                      description: Tags for the job
+                providerConfigRef:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: Name of the ProviderConfig
+                writeConnectionSecretToRef:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+            status:
+              type: object
+              properties:
+                atProvider:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: Job ID in Chronos
+                    lastRunTime:
+                      type: string
+                      format: date-time
+                    lastRunStatus:
+                      type: string
+                      enum: [pending, running, succeeded, failed]
+                    nextRunTime:
+                      type: string
+                      format: date-time
+                    totalRuns:
+                      type: integer
+                    successfulRuns:
+                      type: integer
+                    failedRuns:
+                      type: integer
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string

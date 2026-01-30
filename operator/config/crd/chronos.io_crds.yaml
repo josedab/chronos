@@ -1,0 +1,504 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: chronosjobs.chronos.io
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.13.0
+spec:
+  group: chronos.io
+  names:
+    kind: ChronosJob
+    listKind: ChronosJobList
+    plural: chronosjobs
+    singular: chronosjob
+    shortNames:
+      - cj
+      - cjob
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Schedule
+          type: string
+          jsonPath: .spec.schedule
+        - name: Enabled
+          type: boolean
+          jsonPath: .spec.enabled
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - name
+                - schedule
+                - webhook
+              properties:
+                name:
+                  type: string
+                  description: Human-readable name of the job.
+                description:
+                  type: string
+                  description: Optional description of the job.
+                schedule:
+                  type: string
+                  description: Cron expression for when the job should run.
+                timezone:
+                  type: string
+                  default: UTC
+                  description: IANA timezone for the schedule.
+                enabled:
+                  type: boolean
+                  default: true
+                  description: Whether the job is active.
+                webhook:
+                  type: object
+                  required:
+                    - url
+                  properties:
+                    url:
+                      type: string
+                      description: Webhook endpoint URL.
+                    method:
+                      type: string
+                      default: POST
+                      enum: [GET, POST, PUT, PATCH, DELETE]
+                      description: HTTP method to use.
+                    headers:
+                      type: object
+                      additionalProperties:
+                        type: string
+                      description: Additional HTTP headers.
+                    body:
+                      type: string
+                      description: Request body for POST/PUT/PATCH.
+                    secretRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        key:
+                          type: string
+                      description: Secret containing sensitive headers.
+                timeout:
+                  type: string
+                  default: "30s"
+                  description: Maximum duration for job execution.
+                concurrency:
+                  type: string
+                  default: forbid
+                  enum: [allow, forbid, replace]
+                  description: How overlapping executions are handled.
+                retryPolicy:
+                  type: object
+                  properties:
+                    maxAttempts:
+                      type: integer
+                      default: 3
+                      minimum: 1
+                      maximum: 10
+                    initialInterval:
+                      type: string
+                      default: "1s"
+                    maxInterval:
+                      type: string
+                      default: "1m"
+                    multiplier:
+                      type: number
+                      default: 2
+                  description: Retry behavior on failure.
+                chronosRef:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  description: Reference to external Chronos server.
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: [Pending, Synced, Failed, Disabled]
+                chronosJobID:
+                  type: string
+                lastScheduledTime:
+                  type: string
+                  format: date-time
+                lastSuccessfulTime:
+                  type: string
+                  format: date-time
+                lastFailedTime:
+                  type: string
+                  format: date-time
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                message:
+                  type: string
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: chronosdags.chronos.io
+spec:
+  group: chronos.io
+  names:
+    kind: ChronosDAG
+    listKind: ChronosDAGList
+    plural: chronosdags
+    singular: chronosdag
+    shortNames:
+      - cdag
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Schedule
+          type: string
+          jsonPath: .spec.schedule
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - name
+                - nodes
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                schedule:
+                  type: string
+                timezone:
+                  type: string
+                  default: UTC
+                nodes:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required:
+                      - id
+                    properties:
+                      id:
+                        type: string
+                        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                      jobRef:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                      jobSpec:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      dependencies:
+                        type: array
+                        items:
+                          type: string
+                      condition:
+                        type: string
+                        default: all_success
+                        enum: [all_success, all_complete, any_success, none]
+                      timeout:
+                        type: string
+                        default: "5m"
+                chronosRef:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: [Pending, Valid, Invalid, Synced, Failed]
+                chronosDAGID:
+                  type: string
+                lastRunTime:
+                  type: string
+                  format: date-time
+                lastRunStatus:
+                  type: string
+                nodeStatuses:
+                  type: object
+                  additionalProperties:
+                    type: object
+                    properties:
+                      phase:
+                        type: string
+                      startTime:
+                        type: string
+                        format: date-time
+                      endTime:
+                        type: string
+                        format: date-time
+                      message:
+                        type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                message:
+                  type: string
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: chronostriggers.chronos.io
+spec:
+  group: chronos.io
+  names:
+    kind: ChronosTrigger
+    listKind: ChronosTriggerList
+    plural: chronostriggers
+    singular: chronostrigger
+    shortNames:
+      - ctrig
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Type
+          type: string
+          jsonPath: .spec.type
+        - name: Enabled
+          type: boolean
+          jsonPath: .spec.enabled
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - name
+                - type
+                - jobRef
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [kafka, sqs, pubsub, rabbitmq, webhook]
+                jobRef:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                enabled:
+                  type: boolean
+                  default: true
+                kafka:
+                  type: object
+                  properties:
+                    brokers:
+                      type: array
+                      items:
+                        type: string
+                    topic:
+                      type: string
+                    consumerGroup:
+                      type: string
+                    saslSecretRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        key:
+                          type: string
+                sqs:
+                  type: object
+                  properties:
+                    queueURL:
+                      type: string
+                    region:
+                      type: string
+                    credentialsSecretRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        key:
+                          type: string
+                pubsub:
+                  type: object
+                  properties:
+                    project:
+                      type: string
+                    subscription:
+                      type: string
+                    credentialsSecretRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        key:
+                          type: string
+                rabbitmq:
+                  type: object
+                  properties:
+                    url:
+                      type: string
+                    queue:
+                      type: string
+                    credentialsSecretRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        key:
+                          type: string
+                webhook:
+                  type: object
+                  properties:
+                    path:
+                      type: string
+                      default: "/"
+                    secretRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        key:
+                          type: string
+                filter:
+                  type: object
+                  properties:
+                    eventTypes:
+                      type: array
+                      items:
+                        type: string
+                    headers:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    expression:
+                      type: string
+                chronosRef:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: [Pending, Synced, Connected, Disconnected, Failed]
+                chronosTriggerID:
+                  type: string
+                connected:
+                  type: boolean
+                lastEventTime:
+                  type: string
+                  format: date-time
+                eventsReceived:
+                  type: integer
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                message:
+                  type: string

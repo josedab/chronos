@@ -1,0 +1,314 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: namespaces.chronos.io
+  annotations:
+    crossplane.io/external-name: chronos-namespace
+spec:
+  group: chronos.io
+  names:
+    kind: ChronosNamespace
+    listKind: ChronosNamespaceList
+    plural: chronosnamespaces
+    singular: chronosnamespace
+    shortNames:
+      - cns
+    categories:
+      - chronos
+      - crossplane
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Jobs
+          type: integer
+          jsonPath: .status.atProvider.jobCount
+        - name: Max Jobs
+          type: integer
+          jsonPath: .spec.forProvider.quotas.maxJobs
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - forProvider
+              properties:
+                forProvider:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: Namespace name
+                    description:
+                      type: string
+                    labels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    quotas:
+                      type: object
+                      description: Resource quotas for the namespace
+                      properties:
+                        maxJobs:
+                          type: integer
+                          minimum: 1
+                          description: Maximum number of jobs
+                        maxWorkflows:
+                          type: integer
+                          minimum: 1
+                          description: Maximum number of workflows
+                        maxConcurrentExecutions:
+                          type: integer
+                          minimum: 1
+                          description: Maximum concurrent executions
+                        maxCpuPerExecution:
+                          type: string
+                          description: Maximum CPU per execution (e.g., "2")
+                        maxMemoryPerExecution:
+                          type: string
+                          description: Maximum memory per execution (e.g., "4Gi")
+                        maxExecutionDuration:
+                          type: string
+                          description: Maximum execution duration
+                          default: 1h
+                    defaultSettings:
+                      type: object
+                      description: Default settings for jobs in this namespace
+                      properties:
+                        timeout:
+                          type: string
+                          default: 30m
+                        retryPolicy:
+                          type: object
+                          properties:
+                            maxAttempts:
+                              type: integer
+                              default: 3
+                            initialInterval:
+                              type: string
+                              default: 1s
+                            maxInterval:
+                              type: string
+                              default: 1m
+                        timezone:
+                          type: string
+                          default: UTC
+                    accessControl:
+                      type: object
+                      description: Access control settings
+                      properties:
+                        owners:
+                          type: array
+                          items:
+                            type: string
+                          description: Owner user/group IDs
+                        editors:
+                          type: array
+                          items:
+                            type: string
+                          description: Editor user/group IDs
+                        viewers:
+                          type: array
+                          items:
+                            type: string
+                          description: Viewer user/group IDs
+                        inheritFromParent:
+                          type: boolean
+                          default: true
+                    networking:
+                      type: object
+                      description: Networking settings
+                      properties:
+                        allowedEgressDomains:
+                          type: array
+                          items:
+                            type: string
+                          description: Allowed egress domains
+                        allowedEgressIPs:
+                          type: array
+                          items:
+                            type: string
+                          description: Allowed egress IP ranges
+                        denyAllEgress:
+                          type: boolean
+                          default: false
+                    secrets:
+                      type: array
+                      description: Secrets available to jobs in this namespace
+                      items:
+                        type: object
+                        required:
+                          - name
+                        properties:
+                          name:
+                            type: string
+                            description: Secret name
+                          secretRef:
+                            type: object
+                            description: Reference to a Kubernetes Secret
+                            required:
+                              - name
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                              key:
+                                type: string
+                providerConfigRef:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+            status:
+              type: object
+              properties:
+                atProvider:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    jobCount:
+                      type: integer
+                    workflowCount:
+                      type: integer
+                    activeExecutions:
+                      type: integer
+                    createdAt:
+                      type: string
+                      format: date-time
+                    lastActivity:
+                      type: string
+                      format: date-time
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: providerconfigs.chronos.io
+  annotations:
+    crossplane.io/external-name: chronos-provider-config
+spec:
+  group: chronos.io
+  names:
+    kind: ProviderConfig
+    listKind: ProviderConfigList
+    plural: providerconfigs
+    singular: providerconfig
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - credentials
+              properties:
+                endpoint:
+                  type: string
+                  description: Chronos API endpoint
+                  format: uri
+                credentials:
+                  type: object
+                  required:
+                    - source
+                  properties:
+                    source:
+                      type: string
+                      enum: [Secret, Environment, None]
+                    secretRef:
+                      type: object
+                      required:
+                        - name
+                        - namespace
+                        - key
+                      properties:
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        key:
+                          type: string
+                timeout:
+                  type: integer
+                  description: Request timeout in seconds
+                  default: 30
+                tls:
+                  type: object
+                  properties:
+                    insecureSkipVerify:
+                      type: boolean
+                      default: false
+                    caCertSecretRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        key:
+                          type: string
+            status:
+              type: object
+              properties:
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
