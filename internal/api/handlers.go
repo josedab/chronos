@@ -178,12 +178,7 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 
 	job, err := h.store.GetJob(jobID)
-	if err != nil {
-		if err == models.ErrJobNotFound {
-			h.writeError(w, http.StatusNotFound, "NOT_FOUND", "Job not found")
-			return
-		}
-		h.writeError(w, http.StatusInternalServerError, "STORE_ERROR", "Failed to get job")
+	if h.HandleStoreError(w, err, "get job") {
 		return
 	}
 
@@ -329,12 +324,7 @@ func (h *Handler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteJob(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 
-	if err := h.store.DeleteJob(jobID); err != nil {
-		if err == models.ErrJobNotFound {
-			h.writeError(w, http.StatusNotFound, "NOT_FOUND", "Job not found")
-			return
-		}
-		h.writeError(w, http.StatusInternalServerError, "STORE_ERROR", "Failed to delete job")
+	if h.HandleStoreError(w, h.store.DeleteJob(jobID), "delete job") {
 		return
 	}
 
@@ -360,11 +350,11 @@ func (h *Handler) TriggerJob(w http.ResponseWriter, r *http.Request) {
 
 	execution, err := h.scheduler.TriggerJob(jobID)
 	if err != nil {
-		if err == models.ErrJobNotFound {
-			h.writeError(w, http.StatusNotFound, "NOT_FOUND", "Job not found")
-			return
+		apiErr := MapDomainError(err)
+		if apiErr.Code == ErrCodeInternalError {
+			apiErr = NewExecutionError(err.Error())
 		}
-		h.writeError(w, http.StatusInternalServerError, "EXECUTION_ERROR", err.Error())
+		h.WriteAPIError(w, apiErr)
 		return
 	}
 
