@@ -205,7 +205,7 @@ func (m *MultiDispatcher) GetMetrics() *MultiDispatcherMetrics {
 
 // MultiDispatcherMetrics holds metrics from all dispatchers.
 type MultiDispatcherMetrics struct {
-	HTTP     Metrics
+	HTTP     MetricsSnapshot
 	GRPC     GRPCMetrics
 	Kafka    KafkaMetrics
 	NATS     NATSMetrics

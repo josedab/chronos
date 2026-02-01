@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chronos/chronos/internal/models"
@@ -45,12 +46,11 @@ type runningExecution struct {
 	StartedAt time.Time
 }
 
-// Metrics tracks dispatcher metrics.
+// Metrics tracks dispatcher metrics using atomic counters for thread safety.
 type Metrics struct {
-	ExecutionsTotal   int64
-	ExecutionsSuccess int64
-	ExecutionsFailed  int64
-	mu                sync.Mutex
+	ExecutionsTotal   atomic.Int64
+	ExecutionsSuccess atomic.Int64
+	ExecutionsFailed  atomic.Int64
 }
 
 // Config holds dispatcher configuration.
@@ -178,10 +178,8 @@ func (d *Dispatcher) Execute(ctx context.Context, job *models.Job, scheduledTime
 			execution.Response = result.Response
 			execution.Duration = time.Since(execution.StartedAt)
 
-			d.metrics.mu.Lock()
-			d.metrics.ExecutionsTotal++
-			d.metrics.ExecutionsSuccess++
-			d.metrics.mu.Unlock()
+			d.metrics.ExecutionsTotal.Add(1)
+			d.metrics.ExecutionsSuccess.Add(1)
 
 			return execution, nil
 		}
@@ -225,10 +223,8 @@ func (d *Dispatcher) Execute(ctx context.Context, job *models.Job, scheduledTime
 		execution.Error = lastErr.Error()
 	}
 
-	d.metrics.mu.Lock()
-	d.metrics.ExecutionsTotal++
-	d.metrics.ExecutionsFailed++
-	d.metrics.mu.Unlock()
+	d.metrics.ExecutionsTotal.Add(1)
+	d.metrics.ExecutionsFailed.Add(1)
 
 	return execution, lastErr
 }
@@ -447,14 +443,19 @@ func (d *Dispatcher) RunningCount() int {
 	return len(d.running)
 }
 
+// MetricsSnapshot is a point-in-time snapshot of dispatcher metrics.
+type MetricsSnapshot struct {
+	ExecutionsTotal   int64
+	ExecutionsSuccess int64
+	ExecutionsFailed  int64
+}
+
 // GetMetrics returns a snapshot of the current metrics.
-func (d *Dispatcher) GetMetrics() Metrics {
-	d.metrics.mu.Lock()
-	defer d.metrics.mu.Unlock()
-	return Metrics{
-		ExecutionsTotal:   d.metrics.ExecutionsTotal,
-		ExecutionsSuccess: d.metrics.ExecutionsSuccess,
-		ExecutionsFailed:  d.metrics.ExecutionsFailed,
+func (d *Dispatcher) GetMetrics() MetricsSnapshot {
+	return MetricsSnapshot{
+		ExecutionsTotal:   d.metrics.ExecutionsTotal.Load(),
+		ExecutionsSuccess: d.metrics.ExecutionsSuccess.Load(),
+		ExecutionsFailed:  d.metrics.ExecutionsFailed.Load(),
 	}
 }
 
