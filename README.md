@@ -18,7 +18,11 @@ Chronos is a distributed cron system that provides reliable job scheduling with:
 - **HTTP webhook dispatch** - Language-agnostic job execution
 - **Built-in observability** - Prometheus metrics, structured logging, Web UI
 
-### Next-Gen Features
+### Next-Gen Features (Experimental)
+
+> ⚠️ **Note**: The features listed below are experimental and under active development.
+> They are scaffolded but not yet integrated into the main application. Use at your own risk
+> in production environments. APIs may change without notice.
 
 - **🌐 Cross-Region Federation** - Multi-cluster synchronization with conflict resolution
 - **🔌 Multi-Protocol Dispatch** - gRPC, Kafka, NATS, RabbitMQ in addition to HTTP

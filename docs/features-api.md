@@ -1,5 +1,8 @@
 # Next-Gen Features API Reference
 
+> ⚠️ **EXPERIMENTAL**: The features documented here are experimental and under active development.
+> APIs may change without notice and are not recommended for production use until marked stable.
+
 This document provides API reference for Chronos next-generation features.
 
 ## Table of Contents
