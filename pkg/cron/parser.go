@@ -335,22 +335,109 @@ type CronSchedule struct {
 }
 
 // Next returns the next activation time after the given time.
+// Uses an optimized field-jumping algorithm instead of iterating second-by-second.
 func (s *CronSchedule) Next(t time.Time) time.Time {
-	// Add 1 second to get past the current time
+	// Add 1 second and truncate nanoseconds to get past the current time
 	t = t.Add(1*time.Second - time.Duration(t.Nanosecond())*time.Nanosecond)
 
-	// This is a simplified implementation
-	// Iterate up to 5 years to find the next matching time
-	maxIterations := 5 * 366 * 24 * 60 * 60 // 5 years in seconds
-	for i := 0; i < maxIterations; i++ {
-		if s.matches(t) {
-			return t
+	// Search up to 5 years ahead
+	maxYear := t.Year() + 5
+
+	for t.Year() <= maxYear {
+		// Find next valid month
+		month := int(t.Month())
+		nextMonth := s.nextSetBit(s.Month, month, 12)
+		if nextMonth < 0 {
+			// No valid month this year, go to next year
+			t = time.Date(t.Year()+1, 1, 1, 0, 0, 0, 0, t.Location())
+			continue
 		}
-		t = t.Add(1 * time.Second)
+		if nextMonth > month {
+			// Jump to start of that month
+			t = time.Date(t.Year(), time.Month(nextMonth), 1, 0, 0, 0, 0, t.Location())
+		}
+
+		// Find next valid day (considering both day-of-month and day-of-week)
+		day := t.Day()
+		lastDay := daysInMonth(t.Year(), t.Month())
+
+		foundDay := false
+		for d := day; d <= lastDay; d++ {
+			testTime := time.Date(t.Year(), t.Month(), d, t.Hour(), t.Minute(), t.Second(), 0, t.Location())
+			// Check both day-of-month and day-of-week match
+			if s.Dom&(1<<uint(d)) != 0 && s.Dow&(1<<uint(testTime.Weekday())) != 0 {
+				if d > day {
+					// Reset to start of day
+					t = time.Date(t.Year(), t.Month(), d, 0, 0, 0, 0, t.Location())
+				}
+				foundDay = true
+				break
+			}
+		}
+		if !foundDay {
+			// No valid day this month, go to next month
+			t = time.Date(t.Year(), t.Month()+1, 1, 0, 0, 0, 0, t.Location())
+			continue
+		}
+
+		// Find next valid hour
+		hour := t.Hour()
+		nextHour := s.nextSetBit(s.Hour, hour, 23)
+		if nextHour < 0 {
+			// No valid hour today, go to next day
+			t = time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, t.Location())
+			continue
+		}
+		if nextHour > hour {
+			// Jump to start of that hour
+			t = time.Date(t.Year(), t.Month(), t.Day(), nextHour, 0, 0, 0, t.Location())
+		}
+
+		// Find next valid minute
+		minute := t.Minute()
+		nextMinute := s.nextSetBit(s.Minute, minute, 59)
+		if nextMinute < 0 {
+			// No valid minute this hour, go to next hour
+			t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour()+1, 0, 0, 0, t.Location())
+			continue
+		}
+		if nextMinute > minute {
+			// Jump to start of that minute
+			t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), nextMinute, 0, 0, t.Location())
+		}
+
+		// Find next valid second
+		second := t.Second()
+		nextSecond := s.nextSetBit(s.Second, second, 59)
+		if nextSecond < 0 {
+			// No valid second this minute, go to next minute
+			t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute()+1, 0, 0, t.Location())
+			continue
+		}
+
+		// Found it!
+		return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), nextSecond, 0, t.Location())
 	}
 
-	// This should never happen for valid schedules
+	// No valid time found within 5 years
 	return time.Time{}
+}
+
+// nextSetBit finds the next bit set in the bitmap starting from 'from' up to 'max'.
+// Returns -1 if no bit is set in that range.
+func (s *CronSchedule) nextSetBit(bitmap uint64, from, max int) int {
+	for i := from; i <= max; i++ {
+		if bitmap&(1<<uint(i)) != 0 {
+			return i
+		}
+	}
+	return -1
+}
+
+// daysInMonth returns the number of days in the given month.
+func daysInMonth(year int, month time.Month) int {
+	// Go to first day of next month, then subtract one day
+	return time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
 }
 
 // matches returns true if the given time matches the schedule.
