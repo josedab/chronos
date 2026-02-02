@@ -108,6 +108,32 @@ func NewRouterWithConfig(handler *Handler, logger zerolog.Logger, config RouterC
 	return r
 }
 
+// MountCloudRoutes mounts the cloud/SaaS control plane routes.
+// Call this after creating the router to add cloud management endpoints.
+func MountCloudRoutes(r *chi.Mux, cloudHandler http.Handler) {
+	r.Mount("/api/v1/cloud", cloudHandler)
+}
+
+// MountMarketplaceRoutes mounts the marketplace routes.
+// Call this after creating the router to add marketplace endpoints.
+func MountMarketplaceRoutes(r *chi.Mux, marketplaceHandler http.Handler) {
+	r.Mount("/api/v1/marketplace", marketplaceHandler)
+}
+
+// MountChatbotRoutes mounts Slack and Teams bot webhook routes.
+// These routes are typically public (webhook endpoints) but verify signatures internally.
+func MountChatbotRoutes(r *chi.Mux, slackHandler, teamsHandler http.HandlerFunc) {
+	r.Route("/webhooks", func(r chi.Router) {
+		if slackHandler != nil {
+			r.Post("/slack/command", slackHandler)
+			r.Post("/slack/interaction", slackHandler)
+		}
+		if teamsHandler != nil {
+			r.Post("/teams/messages", teamsHandler)
+		}
+	})
+}
+
 // NewCORSMiddleware creates a CORS middleware with configurable origins.
 func NewCORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
