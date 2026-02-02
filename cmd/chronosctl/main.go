@@ -129,7 +129,66 @@ func main() {
 		},
 	)
 
-	rootCmd.AddCommand(jobCmd, execCmd, clusterCmd)
+	// Migration commands
+	migrateCmd := &cobra.Command{
+		Use:   "migrate",
+		Short: "Migrate jobs from external schedulers",
+	}
+
+	// K8s discovery subcommand
+	k8sDiscoverCmd := &cobra.Command{
+		Use:   "k8s-discover",
+		Short: "Discover Kubernetes CronJobs",
+		Long:  "Discover CronJobs from a Kubernetes cluster using kubeconfig",
+		RunE:  k8sDiscover,
+	}
+	k8sDiscoverCmd.Flags().String("kubeconfig", "", "Path to kubeconfig file (default: ~/.kube/config)")
+	k8sDiscoverCmd.Flags().String("context", "", "Kubernetes context to use")
+	k8sDiscoverCmd.Flags().StringP("namespace", "n", "", "Filter by namespace (default: all namespaces)")
+	k8sDiscoverCmd.Flags().StringP("selector", "l", "", "Label selector (e.g., app=myapp)")
+	k8sDiscoverCmd.Flags().Bool("include-disabled", false, "Include suspended CronJobs")
+
+	// K8s plan subcommand
+	k8sPlanCmd := &cobra.Command{
+		Use:   "k8s-plan",
+		Short: "Create a migration plan for Kubernetes CronJobs",
+		Long:  "Discover CronJobs and create a migration plan (dry-run)",
+		RunE:  k8sPlan,
+	}
+	k8sPlanCmd.Flags().String("kubeconfig", "", "Path to kubeconfig file")
+	k8sPlanCmd.Flags().String("context", "", "Kubernetes context to use")
+	k8sPlanCmd.Flags().StringP("namespace", "n", "", "Filter by namespace")
+	k8sPlanCmd.Flags().StringP("selector", "l", "", "Label selector")
+	k8sPlanCmd.Flags().String("target-namespace", "", "Target Chronos namespace for imported jobs")
+	k8sPlanCmd.Flags().String("adapter-url", "http://chronos-k8s-adapter:8081", "Webhook adapter base URL")
+	k8sPlanCmd.Flags().StringP("output-file", "f", "", "Write plan to file (YAML)")
+
+	// K8s apply subcommand
+	k8sApplyCmd := &cobra.Command{
+		Use:   "k8s-apply",
+		Short: "Apply a migration plan",
+		Long:  "Apply a migration plan to import CronJobs as Chronos jobs",
+		RunE:  k8sApply,
+	}
+	k8sApplyCmd.Flags().StringP("file", "f", "", "Migration plan file to apply")
+	k8sApplyCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
+	k8sApplyCmd.MarkFlagRequired("file")
+
+	// Generic migrate from file
+	migrateFromFileCmd := &cobra.Command{
+		Use:   "from-file",
+		Short: "Migrate from a file",
+		Long:  "Import jobs from a file (supports K8s CronJob, Airflow DAG, EventBridge, Temporal)",
+		RunE:  migrateFromFile,
+	}
+	migrateFromFileCmd.Flags().StringP("file", "f", "", "Source file to migrate")
+	migrateFromFileCmd.Flags().String("source-type", "", "Source type: kubernetes, airflow, eventbridge, temporal, github-actions")
+	migrateFromFileCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
+	migrateFromFileCmd.MarkFlagRequired("file")
+	migrateFromFileCmd.MarkFlagRequired("source-type")
+
+	migrateCmd.AddCommand(k8sDiscoverCmd, k8sPlanCmd, k8sApplyCmd, migrateFromFileCmd)
+	rootCmd.AddCommand(jobCmd, execCmd, clusterCmd, migrateCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -456,6 +515,297 @@ func clusterStatus(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Jobs Total: %.0f\n", status["jobs_total"])
 	} else {
 		printOutput(data)
+	}
+
+	return nil
+}
+
+// Migration commands
+
+func k8sDiscover(cmd *cobra.Command, args []string) error {
+	kubeconfig, _ := cmd.Flags().GetString("kubeconfig")
+	context, _ := cmd.Flags().GetString("context")
+	namespace, _ := cmd.Flags().GetString("namespace")
+	selector, _ := cmd.Flags().GetString("selector")
+	includeDisabled, _ := cmd.Flags().GetBool("include-disabled")
+
+	// Make discovery request to API
+	reqBody := map[string]interface{}{
+		"kubeconfig_path":  kubeconfig,
+		"context":          context,
+		"namespace":        namespace,
+		"label_selector":   selector,
+		"include_disabled": includeDisabled,
+	}
+
+	result, err := apiRequest("POST", "/api/v1/migration/kubernetes/discover", reqBody)
+	if err != nil {
+		return err
+	}
+
+	data := result["data"].(map[string]interface{})
+
+	if output == "table" {
+		cronjobs := data["cronjobs"].([]interface{})
+		namespaces := data["namespaces"].([]interface{})
+
+		fmt.Printf("Discovered %d CronJobs across %d namespaces\n\n",
+			int(data["total"].(float64)), len(namespaces))
+
+		if len(cronjobs) > 0 {
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "NAMESPACE\tNAME\tSCHEDULE\tIMAGE\tSUSPENDED\tWARNINGS")
+
+			for _, cj := range cronjobs {
+				cronjob := cj.(map[string]interface{})
+				suspended := "no"
+				if s, ok := cronjob["suspend"].(bool); ok && s {
+					suspended = "yes"
+				}
+				warnings := 0
+				if w, ok := cronjob["conversion_warnings"].([]interface{}); ok {
+					warnings = len(w)
+				}
+				image := cronjob["image"].(string)
+				if len(image) > 40 {
+					image = image[:37] + "..."
+				}
+
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\n",
+					cronjob["namespace"],
+					cronjob["name"],
+					cronjob["schedule"],
+					image,
+					suspended,
+					warnings,
+				)
+			}
+			w.Flush()
+		}
+	} else {
+		printOutput(data)
+	}
+
+	return nil
+}
+
+func k8sPlan(cmd *cobra.Command, args []string) error {
+	kubeconfig, _ := cmd.Flags().GetString("kubeconfig")
+	context, _ := cmd.Flags().GetString("context")
+	namespace, _ := cmd.Flags().GetString("namespace")
+	selector, _ := cmd.Flags().GetString("selector")
+	targetNamespace, _ := cmd.Flags().GetString("target-namespace")
+	adapterURL, _ := cmd.Flags().GetString("adapter-url")
+	outputFile, _ := cmd.Flags().GetString("output-file")
+
+	reqBody := map[string]interface{}{
+		"kubeconfig_path":  kubeconfig,
+		"context":          context,
+		"namespace":        namespace,
+		"label_selector":   selector,
+		"target_namespace": targetNamespace,
+		"adapter_config": map[string]interface{}{
+			"base_url": adapterURL,
+			"mode":     "kubernetes",
+		},
+	}
+
+	result, err := apiRequest("POST", "/api/v1/migration/kubernetes/plan", reqBody)
+	if err != nil {
+		return err
+	}
+
+	data := result["data"].(map[string]interface{})
+
+	if outputFile != "" {
+		// Write to file
+		planData, err := json.MarshalIndent(data, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal plan: %w", err)
+		}
+
+		// Convert to YAML if .yaml extension
+		if strings.HasSuffix(outputFile, ".yaml") || strings.HasSuffix(outputFile, ".yml") {
+			var planMap map[string]interface{}
+			json.Unmarshal(planData, &planMap)
+			planData, err = yaml.Marshal(planMap)
+			if err != nil {
+				return fmt.Errorf("failed to convert to YAML: %w", err)
+			}
+		}
+
+		if err := os.WriteFile(outputFile, planData, 0644); err != nil {
+			return fmt.Errorf("failed to write plan file: %w", err)
+		}
+		fmt.Printf("Migration plan written to: %s\n", outputFile)
+	}
+
+	if output == "table" {
+		cronjobs := data["cronjobs"].([]interface{})
+
+		fmt.Printf("Migration Plan: %s\n", data["name"])
+		fmt.Printf("Source Cluster: %s\n", data["source_cluster"])
+		if tn, ok := data["target_namespace"].(string); ok && tn != "" {
+			fmt.Printf("Target Namespace: %s\n", tn)
+		}
+		fmt.Printf("Total Jobs: %d\n\n", len(cronjobs))
+
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "SOURCE\tTARGET NAME\tACTION\tWARNINGS")
+
+		for _, item := range cronjobs {
+			cj := item.(map[string]interface{})
+			source := fmt.Sprintf("%s/%s", cj["source_namespace"], cj["source_name"])
+			targetJob := cj["target_job"].(map[string]interface{})
+			warnings := 0
+			if w, ok := cj["warnings"].([]interface{}); ok {
+				warnings = len(w)
+			}
+
+			fmt.Fprintf(w, "%s\t%s\t%s\t%d\n",
+				source,
+				targetJob["name"],
+				cj["action"],
+				warnings,
+			)
+		}
+		w.Flush()
+	} else {
+		printOutput(data)
+	}
+
+	return nil
+}
+
+func k8sApply(cmd *cobra.Command, args []string) error {
+	file, _ := cmd.Flags().GetString("file")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+
+	// Read plan file
+	planData, err := os.ReadFile(file)
+	if err != nil {
+		return fmt.Errorf("failed to read plan file: %w", err)
+	}
+
+	var plan map[string]interface{}
+	if strings.HasSuffix(file, ".yaml") || strings.HasSuffix(file, ".yml") {
+		if err := yaml.Unmarshal(planData, &plan); err != nil {
+			return fmt.Errorf("failed to parse YAML: %w", err)
+		}
+	} else {
+		if err := json.Unmarshal(planData, &plan); err != nil {
+			return fmt.Errorf("failed to parse JSON: %w", err)
+		}
+	}
+
+	plan["dry_run"] = dryRun
+
+	result, err := apiRequest("POST", "/api/v1/migration/kubernetes/apply", plan)
+	if err != nil {
+		return err
+	}
+
+	data := result["data"].(map[string]interface{})
+
+	if dryRun {
+		fmt.Println("DRY RUN - No changes applied")
+		fmt.Println()
+	}
+
+	created := int(data["created"].(float64))
+	updated := int(data["updated"].(float64))
+	skipped := int(data["skipped"].(float64))
+	failed := int(data["failed"].(float64))
+
+	fmt.Printf("Migration Results:\n")
+	fmt.Printf("  Created: %d\n", created)
+	fmt.Printf("  Updated: %d\n", updated)
+	fmt.Printf("  Skipped: %d\n", skipped)
+	fmt.Printf("  Failed:  %d\n", failed)
+
+	if errors, ok := data["errors"].([]interface{}); ok && len(errors) > 0 {
+		fmt.Println("\nErrors:")
+		for _, e := range errors {
+			errMap := e.(map[string]interface{})
+			fmt.Printf("  - %s: %s\n", errMap["item_name"], errMap["error"])
+		}
+	}
+
+	return nil
+}
+
+func migrateFromFile(cmd *cobra.Command, args []string) error {
+	file, _ := cmd.Flags().GetString("file")
+	sourceType, _ := cmd.Flags().GetString("source-type")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Determine endpoint based on source type
+	var endpoint string
+	switch sourceType {
+	case "kubernetes":
+		endpoint = "/api/v1/migration/kubernetes"
+	case "airflow":
+		endpoint = "/api/v1/migration/airflow"
+	case "eventbridge":
+		endpoint = "/api/v1/migration/eventbridge"
+	case "temporal":
+		endpoint = "/api/v1/migration/temporal"
+	case "github-actions":
+		endpoint = "/api/v1/migration/github-actions"
+	default:
+		return fmt.Errorf("unsupported source type: %s", sourceType)
+	}
+
+	if dryRun {
+		endpoint = "/api/v1/migration/preview"
+	}
+
+	var reqBody interface{}
+	if dryRun {
+		reqBody = map[string]interface{}{
+			"source_type": sourceType + "_cronjob",
+			"data":        string(data),
+		}
+	} else {
+		// Send raw data for non-preview
+		reqBody = json.RawMessage(data)
+	}
+
+	result, err := apiRequest("POST", endpoint, reqBody)
+	if err != nil {
+		return err
+	}
+
+	resultData := result["data"].(map[string]interface{})
+
+	if dryRun {
+		fmt.Println("PREVIEW - No changes applied")
+		fmt.Println()
+	}
+
+	if output == "table" {
+		if jobs, ok := resultData["jobs"].([]interface{}); ok {
+			fmt.Printf("Jobs to import: %d\n\n", len(jobs))
+			for _, j := range jobs {
+				job := j.(map[string]interface{})
+				fmt.Printf("  - %s (%s)\n", job["name"], job["schedule"])
+			}
+		}
+
+		if errors, ok := resultData["errors"].([]interface{}); ok && len(errors) > 0 {
+			fmt.Println("\nErrors:")
+			for _, e := range errors {
+				errMap := e.(map[string]interface{})
+				fmt.Printf("  - %s: %s\n", errMap["item_name"], errMap["error"])
+			}
+		}
+	} else {
+		printOutput(resultData)
 	}
 
 	return nil
