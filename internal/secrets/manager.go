@@ -87,9 +87,18 @@ func (m *Manager) ResolveSecret(ctx context.Context, ref SecretRef) (string, err
 // secretPattern matches ${secret:provider:key} or ${secret:provider:key:field}
 var secretPattern = regexp.MustCompile(`\$\{secret:([^:}]+):([^:}]+)(?::([^}]+))?\}`)
 
+// legacySecretPattern matches ${provider:key} format for backward compatibility
+// Supports: vault, aws, gcp, azure, env, file
+var legacySecretPattern = regexp.MustCompile(`\$\{(vault|aws|gcp|azure|env|file):([^}]+)\}`)
+
 // InjectSecrets replaces secret references in a string with actual values.
+// Supports two formats:
+//   - ${secret:provider:key} or ${secret:provider:key:field}
+//   - ${provider:key} (legacy format for vault, aws, gcp, azure)
 func (m *Manager) InjectSecrets(ctx context.Context, input string) (string, error) {
 	var lastErr error
+	
+	// First, handle standard format
 	result := secretPattern.ReplaceAllStringFunc(input, func(match string) string {
 		parts := secretPattern.FindStringSubmatch(match)
 		if len(parts) < 3 {
@@ -102,6 +111,26 @@ func (m *Manager) InjectSecrets(ctx context.Context, input string) (string, erro
 		}
 		if len(parts) > 3 {
 			ref.Field = parts[3]
+		}
+
+		value, err := m.ResolveSecret(ctx, ref)
+		if err != nil {
+			lastErr = err
+			return match
+		}
+		return value
+	})
+
+	// Then, handle legacy format
+	result = legacySecretPattern.ReplaceAllStringFunc(result, func(match string) string {
+		parts := legacySecretPattern.FindStringSubmatch(match)
+		if len(parts) < 3 {
+			return match
+		}
+
+		ref := SecretRef{
+			Provider: parts[1],
+			Key:      parts[2],
 		}
 
 		value, err := m.ResolveSecret(ctx, ref)
@@ -126,6 +155,143 @@ func (m *Manager) InjectSecretsInMap(ctx context.Context, input map[string]strin
 		result[k] = injected
 	}
 	return result, nil
+}
+
+// InjectSecretsInWebhookConfig injects secrets into a webhook configuration.
+func (m *Manager) InjectSecretsInWebhookConfig(ctx context.Context, config *WebhookSecretConfig) (*WebhookSecretConfig, error) {
+	result := &WebhookSecretConfig{
+		URL:     config.URL,
+		Method:  config.Method,
+		Headers: make(map[string]string),
+		Body:    config.Body,
+	}
+
+	// Inject in URL
+	var err error
+	result.URL, err = m.InjectSecrets(ctx, config.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inject secrets in URL: %w", err)
+	}
+
+	// Inject in headers
+	for k, v := range config.Headers {
+		result.Headers[k], err = m.InjectSecrets(ctx, v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to inject secrets in header %s: %w", k, err)
+		}
+	}
+
+	// Inject in body
+	result.Body, err = m.InjectSecrets(ctx, config.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inject secrets in body: %w", err)
+	}
+
+	// Inject auth credentials
+	if config.Auth != nil {
+		result.Auth = &AuthSecretConfig{
+			Type: config.Auth.Type,
+		}
+		if config.Auth.Token != "" {
+			result.Auth.Token, err = m.InjectSecrets(ctx, config.Auth.Token)
+			if err != nil {
+				return nil, fmt.Errorf("failed to inject secrets in auth token: %w", err)
+			}
+		}
+		if config.Auth.APIKey != "" {
+			result.Auth.APIKey, err = m.InjectSecrets(ctx, config.Auth.APIKey)
+			if err != nil {
+				return nil, fmt.Errorf("failed to inject secrets in API key: %w", err)
+			}
+		}
+		if config.Auth.Username != "" {
+			result.Auth.Username, err = m.InjectSecrets(ctx, config.Auth.Username)
+			if err != nil {
+				return nil, fmt.Errorf("failed to inject secrets in username: %w", err)
+			}
+		}
+		if config.Auth.Password != "" {
+			result.Auth.Password, err = m.InjectSecrets(ctx, config.Auth.Password)
+			if err != nil {
+				return nil, fmt.Errorf("failed to inject secrets in password: %w", err)
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// WebhookSecretConfig is a webhook configuration that may contain secret references.
+type WebhookSecretConfig struct {
+	URL     string            `json:"url"`
+	Method  string            `json:"method"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Body    string            `json:"body,omitempty"`
+	Auth    *AuthSecretConfig `json:"auth,omitempty"`
+}
+
+// AuthSecretConfig is an auth configuration that may contain secret references.
+type AuthSecretConfig struct {
+	Type     string `json:"type"`
+	Token    string `json:"token,omitempty"`
+	APIKey   string `json:"api_key,omitempty"`
+	Header   string `json:"header,omitempty"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
+// ValidateSecretReferences validates that all secret references in a string can be resolved.
+func (m *Manager) ValidateSecretReferences(ctx context.Context, input string) []error {
+	var errors []error
+
+	// Find all secret references
+	matches := secretPattern.FindAllStringSubmatch(input, -1)
+	for _, match := range matches {
+		if len(match) < 3 {
+			continue
+		}
+		ref := SecretRef{
+			Provider: match[1],
+			Key:      match[2],
+		}
+		if len(match) > 3 {
+			ref.Field = match[3]
+		}
+
+		if _, err := m.ResolveSecret(ctx, ref); err != nil {
+			errors = append(errors, fmt.Errorf("secret %s:%s: %w", ref.Provider, ref.Key, err))
+		}
+	}
+
+	// Also check legacy format
+	legacyMatches := legacySecretPattern.FindAllStringSubmatch(input, -1)
+	for _, match := range legacyMatches {
+		if len(match) < 3 {
+			continue
+		}
+		ref := SecretRef{
+			Provider: match[1],
+			Key:      match[2],
+		}
+
+		if _, err := m.ResolveSecret(ctx, ref); err != nil {
+			errors = append(errors, fmt.Errorf("secret %s:%s: %w", ref.Provider, ref.Key, err))
+		}
+	}
+
+	return errors
+}
+
+// ListProviders returns the names of all registered providers.
+func (m *Manager) ListProviders() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	providers := make([]string, 0, len(m.providers))
+	for name := range m.providers {
+		providers = append(providers, name)
+	}
+	return providers
 }
 
 // Close closes all providers.
