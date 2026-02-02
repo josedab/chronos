@@ -4,6 +4,7 @@ package prediction
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -93,21 +94,126 @@ type JobStats struct {
 
 // Predictor provides failure prediction capabilities.
 type Predictor struct {
-	mu       sync.RWMutex
-	records  map[string][]ExecutionRecord
-	stats    map[string]*JobStats
-	alerts   []Alert
-	minDataPoints int
+	mu               sync.RWMutex
+	records          map[string][]ExecutionRecord
+	stats            map[string]*JobStats
+	alerts           []Alert
+	minDataPoints    int
+	featureExtractor *FeatureExtractor
+	mlPredictor      *GradientBoostingPredictor
+	notificationMgr  *NotificationManager
+	useMLPrediction  bool
+}
+
+// PredictorConfig configures the predictor.
+type PredictorConfig struct {
+	MinDataPoints    int  `json:"min_data_points" yaml:"min_data_points"`
+	UseMLPrediction  bool `json:"use_ml_prediction" yaml:"use_ml_prediction"`
+	MLNumTrees       int  `json:"ml_num_trees" yaml:"ml_num_trees"`
+	MLLearningRate   float64 `json:"ml_learning_rate" yaml:"ml_learning_rate"`
+}
+
+// DefaultPredictorConfig returns a default predictor configuration.
+func DefaultPredictorConfig() PredictorConfig {
+	return PredictorConfig{
+		MinDataPoints:   10,
+		UseMLPrediction: true,
+		MLNumTrees:      50,
+		MLLearningRate:  0.1,
+	}
 }
 
 // NewPredictor creates a new predictor.
 func NewPredictor() *Predictor {
+	return NewPredictorWithConfig(DefaultPredictorConfig())
+}
+
+// NewPredictorWithConfig creates a new predictor with configuration.
+func NewPredictorWithConfig(cfg PredictorConfig) *Predictor {
 	return &Predictor{
-		records:       make(map[string][]ExecutionRecord),
-		stats:         make(map[string]*JobStats),
-		alerts:        make([]Alert, 0),
-		minDataPoints: 10,
+		records:          make(map[string][]ExecutionRecord),
+		stats:            make(map[string]*JobStats),
+		alerts:           make([]Alert, 0),
+		minDataPoints:    cfg.MinDataPoints,
+		featureExtractor: NewFeatureExtractor(),
+		mlPredictor:      NewGradientBoostingPredictor(cfg.MLNumTrees, cfg.MLLearningRate),
+		notificationMgr:  NewNotificationManager(),
+		useMLPrediction:  cfg.UseMLPrediction,
 	}
+}
+
+// GetNotificationManager returns the notification manager for configuration.
+func (p *Predictor) GetNotificationManager() *NotificationManager {
+	return p.notificationMgr
+}
+
+// SetMLPrediction enables or disables ML-based prediction.
+func (p *Predictor) SetMLPrediction(enabled bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.useMLPrediction = enabled
+}
+
+// TrainMLModel trains the ML model on historical data.
+func (p *Predictor) TrainMLModel(ctx context.Context) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	var allFeatures []*FeatureSet
+	var allLabels []bool
+
+	for jobID, records := range p.records {
+		if len(records) < p.minDataPoints {
+			continue
+		}
+
+		// Create feature sets for each execution (using previous records to predict)
+		for i := p.minDataPoints; i < len(records); i++ {
+			historicalRecords := records[:i]
+			currentRecord := records[i]
+
+			features, err := p.featureExtractor.ExtractFeatures(historicalRecords, currentRecord.Timestamp)
+			if err != nil {
+				continue
+			}
+
+			allFeatures = append(allFeatures, features)
+			allLabels = append(allLabels, !currentRecord.Success)
+			_ = jobID // jobID used indirectly in the loop
+		}
+	}
+
+	if len(allFeatures) < 100 {
+		return fmt.Errorf("insufficient training data: need at least 100 samples, have %d", len(allFeatures))
+	}
+
+	return p.mlPredictor.Train(allFeatures, allLabels)
+}
+
+// GetMLModelMetrics returns ML model performance metrics.
+func (p *Predictor) GetMLModelMetrics(ctx context.Context) (*ModelMetrics, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	var allFeatures []*FeatureSet
+	var allLabels []bool
+
+	for _, records := range p.records {
+		if len(records) < p.minDataPoints {
+			continue
+		}
+
+		for i := p.minDataPoints; i < len(records); i++ {
+			features, err := p.featureExtractor.ExtractFeatures(records[:i], records[i].Timestamp)
+			if err != nil {
+				continue
+			}
+			allFeatures = append(allFeatures, features)
+			allLabels = append(allLabels, !records[i].Success)
+		}
+	}
+
+	return p.mlPredictor.Evaluate(allFeatures, allLabels)
 }
 
 // RecordExecution records an execution for analysis.
@@ -157,7 +263,42 @@ func (p *Predictor) Predict(ctx context.Context, jobID string) (*Prediction, err
 		RecommendedActions: make([]string, 0),
 	}
 
-	// Calculate failure probability based on multiple factors
+	// Try ML-based prediction if enabled and trained
+	if p.useMLPrediction && p.mlPredictor != nil {
+		features, err := p.featureExtractor.ExtractFeatures(records, time.Now())
+		if err == nil {
+			mlProb, mlErr := p.mlPredictor.Predict(features)
+			if mlErr == nil {
+				prediction.FailureProbability = mlProb
+				prediction.Confidence = 0.85 // ML models generally have higher confidence
+
+				// Add ML-derived reasons
+				if features.ConsecutiveFailures > 2 {
+					prediction.Reasons = append(prediction.Reasons, fmt.Sprintf("%d consecutive failures detected", features.ConsecutiveFailures))
+				}
+				if features.RecentFailureRate > features.HistoricalFailureRate*1.5 {
+					prediction.Reasons = append(prediction.Reasons, "recent failure rate significantly higher than historical")
+				}
+				if features.NewErrorTypeRecent {
+					prediction.Reasons = append(prediction.Reasons, "new error type detected recently")
+				}
+				if features.RecentDurationTrend > 0.3 {
+					prediction.Reasons = append(prediction.Reasons, "execution duration increasing trend")
+				}
+				if features.StabilityScore < 0.5 {
+					prediction.Reasons = append(prediction.Reasons, "low stability score")
+				}
+
+				// Set risk level based on ML prediction
+				prediction.RiskLevel = p.calculateRiskLevel(mlProb)
+				prediction.RecommendedActions = p.getRecommendedActions(prediction.RiskLevel, features)
+
+				return prediction, nil
+			}
+		}
+	}
+
+	// Fall back to rule-based prediction
 	var probability float64
 	var confidence float64
 
@@ -209,29 +350,59 @@ func (p *Predictor) Predict(ctx context.Context, jobID string) (*Prediction, err
 	prediction.Confidence = confidence
 
 	// Determine risk level
+	prediction.RiskLevel = p.calculateRiskLevel(prediction.FailureProbability)
+	prediction.RecommendedActions = p.getRecommendedActions(prediction.RiskLevel, nil)
+
+	return prediction, nil
+}
+
+// calculateRiskLevel determines risk level from probability.
+func (p *Predictor) calculateRiskLevel(probability float64) RiskLevel {
 	switch {
-	case prediction.FailureProbability >= 0.7:
-		prediction.RiskLevel = RiskCritical
-		prediction.RecommendedActions = append(prediction.RecommendedActions, 
+	case probability >= 0.7:
+		return RiskCritical
+	case probability >= 0.5:
+		return RiskHigh
+	case probability >= 0.3:
+		return RiskMedium
+	default:
+		return RiskLow
+	}
+}
+
+// getRecommendedActions returns actions based on risk level and features.
+func (p *Predictor) getRecommendedActions(risk RiskLevel, features *FeatureSet) []string {
+	var actions []string
+
+	switch risk {
+	case RiskCritical:
+		actions = append(actions, 
 			"consider disabling job until issue is resolved",
 			"review recent changes to the webhook endpoint",
 			"increase retry attempts or timeout")
-	case prediction.FailureProbability >= 0.5:
-		prediction.RiskLevel = RiskHigh
-		prediction.RecommendedActions = append(prediction.RecommendedActions,
+		if features != nil && features.ConsecutiveFailures > 5 {
+			actions = append(actions, "consider circuit breaker pattern")
+		}
+	case RiskHigh:
+		actions = append(actions,
 			"monitor job closely",
 			"prepare fallback mechanism",
 			"review error logs")
-	case prediction.FailureProbability >= 0.3:
-		prediction.RiskLevel = RiskMedium
-		prediction.RecommendedActions = append(prediction.RecommendedActions,
+		if features != nil && features.NewErrorTypeRecent {
+			actions = append(actions, "investigate new error type")
+		}
+	case RiskMedium:
+		actions = append(actions,
 			"review recent execution logs",
 			"verify endpoint availability")
-	default:
-		prediction.RiskLevel = RiskLow
+		if features != nil && features.RecentDurationTrend > 0.2 {
+			actions = append(actions, "investigate performance degradation")
+		}
+	case RiskLow:
+		// No specific actions needed for low risk
 	}
 
-	return prediction, nil
+	return actions
 }
 
 // GetStats returns statistics for a job.
