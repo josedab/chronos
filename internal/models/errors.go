@@ -20,4 +20,17 @@ var (
 	ErrNamespaceNotFound     = errors.New("namespace not found")
 	ErrScheduleStateNotFound = errors.New("schedule state not found")
 	ErrVersionNotFound       = errors.New("version not found")
+
+	// Alert errors
+	ErrAlertChannelNotFound       = errors.New("alert channel not found")
+	ErrAlertChannelNameRequired   = errors.New("alert channel name is required")
+	ErrAlertChannelTypeRequired   = errors.New("alert channel type is required")
+	ErrInvalidAlertChannelType    = errors.New("invalid alert channel type")
+	ErrSlackWebhookRequired       = errors.New("slack webhook URL is required")
+	ErrEmailRecipientsRequired    = errors.New("email recipients are required")
+	ErrPagerDutyKeyRequired       = errors.New("pagerduty routing key is required")
+	ErrAlertRuleNotFound          = errors.New("alert rule not found")
+	ErrAlertRuleNameRequired      = errors.New("alert rule name is required")
+	ErrAlertRuleChannelsRequired  = errors.New("alert rule must have at least one channel")
+	ErrAlertRuleConditionsRequired = errors.New("alert rule must have at least one condition enabled")
 )
