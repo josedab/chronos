@@ -68,6 +68,31 @@ type VersionStore interface {
 	GetJobVersion(jobID string, version int) (*models.JobVersion, error)
 }
 
+// AlertStore provides alert channel and rule persistence operations.
+type AlertStore interface {
+	// CreateAlertChannel stores a new alert channel.
+	CreateAlertChannel(channel *models.AlertChannel) error
+	// UpdateAlertChannel updates an existing alert channel.
+	UpdateAlertChannel(channel *models.AlertChannel) error
+	// GetAlertChannel retrieves an alert channel by ID.
+	GetAlertChannel(id string) (*models.AlertChannel, error)
+	// DeleteAlertChannel deletes an alert channel by ID.
+	DeleteAlertChannel(id string) error
+	// ListAlertChannels returns all alert channels.
+	ListAlertChannels() ([]*models.AlertChannel, error)
+
+	// CreateAlertRule stores a new alert rule.
+	CreateAlertRule(rule *models.AlertRule) error
+	// UpdateAlertRule updates an existing alert rule.
+	UpdateAlertRule(rule *models.AlertRule) error
+	// GetAlertRule retrieves an alert rule by ID.
+	GetAlertRule(id string) (*models.AlertRule, error)
+	// DeleteAlertRule deletes an alert rule by ID.
+	DeleteAlertRule(id string) error
+	// ListAlertRules returns all alert rules.
+	ListAlertRules() ([]*models.AlertRule, error)
+}
+
 // SnapshotStore provides snapshot operations for Raft integration.
 type SnapshotStore interface {
 	// Snapshot creates a snapshot of all data.
@@ -84,6 +109,7 @@ type Store interface {
 	ScheduleStore
 	LockStore
 	VersionStore
+	AlertStore
 	SnapshotStore
 
 	// Close closes the store and releases resources.
