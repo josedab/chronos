@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/chronos/chronos/internal/models"
@@ -21,6 +22,7 @@ type HandlerStore interface {
 	storage.JobStore
 	storage.ExecutionStore
 	storage.VersionStore
+	storage.AlertStore
 }
 
 // Handler handles API requests.
@@ -710,4 +712,517 @@ func (h *Handler) writeError(w http.ResponseWriter, status int, code, message st
 			Message: message,
 		},
 	})
+}
+
+// ============================================
+// Alert Channel Handlers
+// ============================================
+
+// AlertChannelRequest is the request body for creating/updating an alert channel.
+type AlertChannelRequest struct {
+	Name    string                   `json:"name"`
+	Type    models.AlertChannelType  `json:"type"`
+	Enabled bool                     `json:"enabled"`
+	Config  map[string]string        `json:"config"`
+}
+
+// ListAlertChannels returns all alert channels.
+func (h *Handler) ListAlertChannels(w http.ResponseWriter, r *http.Request) {
+	channels, err := h.store.ListAlertChannels()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "LIST_CHANNELS_FAILED", err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data:    map[string]interface{}{"channels": channels, "total": len(channels)},
+	})
+}
+
+// CreateAlertChannel creates a new alert channel.
+func (h *Handler) CreateAlertChannel(w http.ResponseWriter, r *http.Request) {
+	var req AlertChannelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid request body")
+		return
+	}
+
+	channel := &models.AlertChannel{
+		ID:        uuid.New().String(),
+		Name:      req.Name,
+		Type:      req.Type,
+		Enabled:   req.Enabled,
+		Config:    req.Config,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := channel.Validate(); err != nil {
+		h.writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", err.Error())
+		return
+	}
+
+	if err := h.store.CreateAlertChannel(channel); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "CREATE_CHANNEL_FAILED", err.Error())
+		return
+	}
+
+	h.logger.Info().Str("channel_id", channel.ID).Str("name", channel.Name).Msg("Alert channel created")
+	h.writeJSON(w, http.StatusCreated, Response{Success: true, Data: channel})
+}
+
+// GetAlertChannel retrieves an alert channel by ID.
+func (h *Handler) GetAlertChannel(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	channel, err := h.store.GetAlertChannel(id)
+	if err == models.ErrAlertChannelNotFound {
+		h.writeError(w, http.StatusNotFound, "CHANNEL_NOT_FOUND", "Alert channel not found")
+		return
+	}
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "GET_CHANNEL_FAILED", err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, Response{Success: true, Data: channel})
+}
+
+// UpdateAlertChannel updates an existing alert channel.
+func (h *Handler) UpdateAlertChannel(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	existing, err := h.store.GetAlertChannel(id)
+	if err == models.ErrAlertChannelNotFound {
+		h.writeError(w, http.StatusNotFound, "CHANNEL_NOT_FOUND", "Alert channel not found")
+		return
+	}
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "GET_CHANNEL_FAILED", err.Error())
+		return
+	}
+
+	var req AlertChannelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid request body")
+		return
+	}
+
+	existing.Name = req.Name
+	existing.Type = req.Type
+	existing.Enabled = req.Enabled
+	existing.Config = req.Config
+	existing.UpdatedAt = time.Now()
+
+	if err := existing.Validate(); err != nil {
+		h.writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", err.Error())
+		return
+	}
+
+	if err := h.store.UpdateAlertChannel(existing); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "UPDATE_CHANNEL_FAILED", err.Error())
+		return
+	}
+
+	h.logger.Info().Str("channel_id", id).Msg("Alert channel updated")
+	h.writeJSON(w, http.StatusOK, Response{Success: true, Data: existing})
+}
+
+// DeleteAlertChannel deletes an alert channel.
+func (h *Handler) DeleteAlertChannel(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	if err := h.store.DeleteAlertChannel(id); err == models.ErrAlertChannelNotFound {
+		h.writeError(w, http.StatusNotFound, "CHANNEL_NOT_FOUND", "Alert channel not found")
+		return
+	} else if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "DELETE_CHANNEL_FAILED", err.Error())
+		return
+	}
+
+	h.logger.Info().Str("channel_id", id).Msg("Alert channel deleted")
+	h.writeJSON(w, http.StatusOK, Response{Success: true, Data: map[string]string{"deleted": id}})
+}
+
+// ============================================
+// Alert Rule Handlers
+// ============================================
+
+// AlertRuleRequest is the request body for creating/updating an alert rule.
+type AlertRuleRequest struct {
+	Name        string                `json:"name"`
+	Description string                `json:"description,omitempty"`
+	Enabled     bool                  `json:"enabled"`
+	Conditions  models.AlertCondition `json:"conditions"`
+	ChannelIDs  []string              `json:"channel_ids"`
+	JobFilter   *models.JobFilter     `json:"job_filter,omitempty"`
+}
+
+// ListAlertRules returns all alert rules.
+func (h *Handler) ListAlertRules(w http.ResponseWriter, r *http.Request) {
+	rules, err := h.store.ListAlertRules()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "LIST_RULES_FAILED", err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data:    map[string]interface{}{"rules": rules, "total": len(rules)},
+	})
+}
+
+// CreateAlertRule creates a new alert rule.
+func (h *Handler) CreateAlertRule(w http.ResponseWriter, r *http.Request) {
+	var req AlertRuleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid request body")
+		return
+	}
+
+	rule := &models.AlertRule{
+		ID:          uuid.New().String(),
+		Name:        req.Name,
+		Description: req.Description,
+		Enabled:     req.Enabled,
+		Conditions:  req.Conditions,
+		ChannelIDs:  req.ChannelIDs,
+		JobFilter:   req.JobFilter,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	if err := rule.Validate(); err != nil {
+		h.writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", err.Error())
+		return
+	}
+
+	// Verify all referenced channels exist
+	for _, channelID := range req.ChannelIDs {
+		if _, err := h.store.GetAlertChannel(channelID); err == models.ErrAlertChannelNotFound {
+			h.writeError(w, http.StatusBadRequest, "INVALID_CHANNEL", "Channel "+channelID+" not found")
+			return
+		}
+	}
+
+	if err := h.store.CreateAlertRule(rule); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "CREATE_RULE_FAILED", err.Error())
+		return
+	}
+
+	h.logger.Info().Str("rule_id", rule.ID).Str("name", rule.Name).Msg("Alert rule created")
+	h.writeJSON(w, http.StatusCreated, Response{Success: true, Data: rule})
+}
+
+// GetAlertRule retrieves an alert rule by ID.
+func (h *Handler) GetAlertRule(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	rule, err := h.store.GetAlertRule(id)
+	if err == models.ErrAlertRuleNotFound {
+		h.writeError(w, http.StatusNotFound, "RULE_NOT_FOUND", "Alert rule not found")
+		return
+	}
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "GET_RULE_FAILED", err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, Response{Success: true, Data: rule})
+}
+
+// UpdateAlertRule updates an existing alert rule.
+func (h *Handler) UpdateAlertRule(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	existing, err := h.store.GetAlertRule(id)
+	if err == models.ErrAlertRuleNotFound {
+		h.writeError(w, http.StatusNotFound, "RULE_NOT_FOUND", "Alert rule not found")
+		return
+	}
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "GET_RULE_FAILED", err.Error())
+		return
+	}
+
+	var req AlertRuleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid request body")
+		return
+	}
+
+	existing.Name = req.Name
+	existing.Description = req.Description
+	existing.Enabled = req.Enabled
+	existing.Conditions = req.Conditions
+	existing.ChannelIDs = req.ChannelIDs
+	existing.JobFilter = req.JobFilter
+	existing.UpdatedAt = time.Now()
+
+	if err := existing.Validate(); err != nil {
+		h.writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", err.Error())
+		return
+	}
+
+	// Verify all referenced channels exist
+	for _, channelID := range req.ChannelIDs {
+		if _, err := h.store.GetAlertChannel(channelID); err == models.ErrAlertChannelNotFound {
+			h.writeError(w, http.StatusBadRequest, "INVALID_CHANNEL", "Channel "+channelID+" not found")
+			return
+		}
+	}
+
+	if err := h.store.UpdateAlertRule(existing); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "UPDATE_RULE_FAILED", err.Error())
+		return
+	}
+
+	h.logger.Info().Str("rule_id", id).Msg("Alert rule updated")
+	h.writeJSON(w, http.StatusOK, Response{Success: true, Data: existing})
+}
+
+// DeleteAlertRule deletes an alert rule.
+func (h *Handler) DeleteAlertRule(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	if err := h.store.DeleteAlertRule(id); err == models.ErrAlertRuleNotFound {
+		h.writeError(w, http.StatusNotFound, "RULE_NOT_FOUND", "Alert rule not found")
+		return
+	} else if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "DELETE_RULE_FAILED", err.Error())
+		return
+	}
+
+	h.logger.Info().Str("rule_id", id).Msg("Alert rule deleted")
+	h.writeJSON(w, http.StatusOK, Response{Success: true, Data: map[string]string{"deleted": id}})
+}
+
+// ============================================
+// Webhook Test Handler
+// ============================================
+
+// WebhookTestRequest is the request body for testing a webhook.
+type WebhookTestRequest struct {
+	URL     string            `json:"url"`
+	Method  string            `json:"method"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Body    string            `json:"body,omitempty"`
+}
+
+// WebhookTestResponse is the response from a webhook test.
+type WebhookTestResponse struct {
+	Success          bool   `json:"success"`
+	TargetStatus     int    `json:"target_status,omitempty"`
+	TargetStatusText string `json:"target_status_text,omitempty"`
+	TargetResponse   string `json:"target_response,omitempty"`
+	ResponseTimeMs   int64  `json:"response_time_ms"`
+	Error            string `json:"error,omitempty"`
+}
+
+// TestWebhook tests a webhook endpoint by sending a request to it.
+func (h *Handler) TestWebhook(w http.ResponseWriter, r *http.Request) {
+	var req WebhookTestRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid request body")
+		return
+	}
+
+	if req.URL == "" {
+		h.writeError(w, http.StatusBadRequest, "URL_REQUIRED", "Webhook URL is required")
+		return
+	}
+
+	if req.Method == "" {
+		req.Method = "POST"
+	}
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Build request
+	var bodyReader *http.Request
+	var err error
+	if req.Body != "" && req.Method != "GET" {
+		bodyReader, err = http.NewRequest(req.Method, req.URL, strings.NewReader(req.Body))
+	} else {
+		bodyReader, err = http.NewRequest(req.Method, req.URL, nil)
+	}
+	if err != nil {
+		h.writeJSON(w, http.StatusOK, Response{
+			Success: true,
+			Data: WebhookTestResponse{
+				Success: false,
+				Error:   "Failed to create request: " + err.Error(),
+			},
+		})
+		return
+	}
+
+	// Set headers
+	bodyReader.Header.Set("Content-Type", "application/json")
+	bodyReader.Header.Set("User-Agent", "Chronos-Webhook-Tester/1.0")
+	for key, value := range req.Headers {
+		bodyReader.Header.Set(key, value)
+	}
+
+	// Send request and measure time
+	startTime := time.Now()
+	resp, err := client.Do(bodyReader)
+	responseTime := time.Since(startTime).Milliseconds()
+
+	if err != nil {
+		h.writeJSON(w, http.StatusOK, Response{
+			Success: true,
+			Data: WebhookTestResponse{
+				Success:        false,
+				ResponseTimeMs: responseTime,
+				Error:          "Request failed: " + err.Error(),
+			},
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	// Read response body (limit to 10KB)
+	bodyBytes := make([]byte, 10240)
+	n, _ := resp.Body.Read(bodyBytes)
+	responseBody := string(bodyBytes[:n])
+
+	h.logger.Info().
+		Str("url", req.URL).
+		Str("method", req.Method).
+		Int("status", resp.StatusCode).
+		Int64("response_time_ms", responseTime).
+		Msg("Webhook test completed")
+
+	h.writeJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data: WebhookTestResponse{
+			Success:          resp.StatusCode >= 200 && resp.StatusCode < 400,
+			TargetStatus:     resp.StatusCode,
+			TargetStatusText: resp.Status,
+			TargetResponse:   responseBody,
+			ResponseTimeMs:   responseTime,
+		},
+	})
+}
+
+// ============================================
+// Execution Log Streaming (SSE)
+// ============================================
+
+// StreamExecutionLogs streams execution logs via Server-Sent Events.
+// This provides real-time updates as an execution progresses.
+func (h *Handler) StreamExecutionLogs(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	execID := chi.URLParam(r, "execId")
+
+	// Verify execution exists
+	exec, err := h.store.GetExecution(jobID, execID)
+	if err == models.ErrExecutionNotFound {
+		h.writeError(w, http.StatusNotFound, "EXECUTION_NOT_FOUND", "Execution not found")
+		return
+	}
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "GET_EXECUTION_FAILED", err.Error())
+		return
+	}
+
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // Disable nginx buffering
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		h.writeError(w, http.StatusInternalServerError, "SSE_NOT_SUPPORTED", "Streaming not supported")
+		return
+	}
+
+	// Send initial execution status
+	h.sendSSEEvent(w, flusher, "status", map[string]interface{}{
+		"execution_id": exec.ID,
+		"job_id":       exec.JobID,
+		"status":       exec.Status,
+		"started_at":   exec.StartedAt,
+		"completed_at": exec.CompletedAt,
+	})
+
+	// If execution is already complete, send final status and close
+	if exec.Status == models.ExecutionSuccess || 
+	   exec.Status == models.ExecutionFailed ||
+	   exec.Status == models.ExecutionSkipped {
+		h.sendSSEEvent(w, flusher, "complete", map[string]interface{}{
+			"status":       exec.Status,
+			"status_code":  exec.StatusCode,
+			"response":     exec.Response,
+			"error":        exec.Error,
+			"completed_at": exec.CompletedAt,
+		})
+		return
+	}
+
+	// For running executions, poll for updates
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	ctx := r.Context()
+	timeout := time.After(5 * time.Minute) // Max streaming time
+
+	for {
+		select {
+		case <-ctx.Done():
+			h.sendSSEEvent(w, flusher, "disconnect", map[string]string{"reason": "client_disconnected"})
+			return
+
+		case <-timeout:
+			h.sendSSEEvent(w, flusher, "timeout", map[string]string{"reason": "max_duration_exceeded"})
+			return
+
+		case <-ticker.C:
+			// Poll for updated execution status
+			updatedExec, err := h.store.GetExecution(jobID, execID)
+			if err != nil {
+				h.sendSSEEvent(w, flusher, "error", map[string]string{"error": err.Error()})
+				return
+			}
+
+			// Send heartbeat with current status
+			h.sendSSEEvent(w, flusher, "heartbeat", map[string]interface{}{
+				"status":    updatedExec.Status,
+				"attempts":  updatedExec.Attempts,
+				"timestamp": time.Now().Format(time.RFC3339),
+			})
+
+			// If execution completed, send final event and close
+			if updatedExec.Status == models.ExecutionSuccess || 
+			   updatedExec.Status == models.ExecutionFailed ||
+			   updatedExec.Status == models.ExecutionSkipped {
+				h.sendSSEEvent(w, flusher, "complete", map[string]interface{}{
+					"status":       updatedExec.Status,
+					"status_code":  updatedExec.StatusCode,
+					"response":     updatedExec.Response,
+					"error":        updatedExec.Error,
+					"completed_at": updatedExec.CompletedAt,
+					"duration_ms":  updatedExec.Duration,
+				})
+				return
+			}
+		}
+	}
+}
+
+// sendSSEEvent sends a Server-Sent Event to the client.
+func (h *Handler) sendSSEEvent(w http.ResponseWriter, flusher http.Flusher, eventType string, data interface{}) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		h.logger.Error().Err(err).Msg("Failed to marshal SSE data")
+		return
+	}
+
+	_, _ = w.Write([]byte("event: " + eventType + "\n"))
+	_, _ = w.Write([]byte("data: " + string(jsonData) + "\n\n"))
+	flusher.Flush()
 }

@@ -95,6 +95,7 @@ func NewRouterWithConfig(handler *Handler, logger zerolog.Logger, config RouterC
 					r.With(RequirePermission(config.RBACConfig, "execution:read")).Get("/", handler.ListExecutions)
 					r.With(RequirePermission(config.RBACConfig, "execution:read")).Get("/{execId}", handler.GetExecution)
 					r.With(RequirePermission(config.RBACConfig, "execution:replay")).Post("/{execId}/replay", handler.ReplayExecution)
+					r.With(RequirePermission(config.RBACConfig, "execution:read")).Get("/{execId}/logs/stream", handler.StreamExecutionLogs)
 				})
 			})
 		})
@@ -102,6 +103,31 @@ func NewRouterWithConfig(handler *Handler, logger zerolog.Logger, config RouterC
 		// Cluster
 		r.Route("/cluster", func(r chi.Router) {
 			r.With(RequirePermission(config.RBACConfig, "admin:cluster")).Get("/status", handler.ClusterStatus)
+		})
+
+		// Alerts
+		r.Route("/alerts", func(r chi.Router) {
+			// Channels
+			r.Route("/channels", func(r chi.Router) {
+				r.With(RequirePermission(config.RBACConfig, "alerts:read")).Get("/", handler.ListAlertChannels)
+				r.With(RequirePermission(config.RBACConfig, "alerts:write")).Post("/", handler.CreateAlertChannel)
+				r.With(RequirePermission(config.RBACConfig, "alerts:read")).Get("/{id}", handler.GetAlertChannel)
+				r.With(RequirePermission(config.RBACConfig, "alerts:write")).Put("/{id}", handler.UpdateAlertChannel)
+				r.With(RequirePermission(config.RBACConfig, "alerts:delete")).Delete("/{id}", handler.DeleteAlertChannel)
+			})
+			// Rules
+			r.Route("/rules", func(r chi.Router) {
+				r.With(RequirePermission(config.RBACConfig, "alerts:read")).Get("/", handler.ListAlertRules)
+				r.With(RequirePermission(config.RBACConfig, "alerts:write")).Post("/", handler.CreateAlertRule)
+				r.With(RequirePermission(config.RBACConfig, "alerts:read")).Get("/{id}", handler.GetAlertRule)
+				r.With(RequirePermission(config.RBACConfig, "alerts:write")).Put("/{id}", handler.UpdateAlertRule)
+				r.With(RequirePermission(config.RBACConfig, "alerts:delete")).Delete("/{id}", handler.DeleteAlertRule)
+			})
+		})
+
+		// Webhooks
+		r.Route("/webhooks", func(r chi.Router) {
+			r.With(RequirePermission(config.RBACConfig, "job:create")).Post("/test", handler.TestWebhook)
 		})
 	})
 
