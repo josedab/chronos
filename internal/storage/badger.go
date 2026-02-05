@@ -19,6 +19,7 @@ var (
 	_ ScheduleStore  = (*BadgerStore)(nil)
 	_ LockStore      = (*BadgerStore)(nil)
 	_ VersionStore   = (*BadgerStore)(nil)
+	_ AlertStore     = (*BadgerStore)(nil)
 	_ SnapshotStore  = (*BadgerStore)(nil)
 )
 
@@ -32,11 +33,13 @@ type BadgerStore struct {
 
 // Prefix keys for different data types.
 const (
-	prefixJobs       = "jobs/"
-	prefixExecutions = "executions/"
-	prefixSchedule   = "schedule/"
-	prefixLocks      = "locks/"
-	prefixVersions   = "versions/"
+	prefixJobs          = "jobs/"
+	prefixExecutions    = "executions/"
+	prefixSchedule      = "schedule/"
+	prefixLocks         = "locks/"
+	prefixVersions      = "versions/"
+	prefixAlertChannels = "alert_channels/"
+	prefixAlertRules    = "alert_rules/"
 )
 
 // NewStore creates a new BadgerDB store.
@@ -785,4 +788,233 @@ func (s *BadgerStore) Restore(snapshot []byte) error {
 
 		return nil
 	})
+}
+
+// ============================================
+// AlertStore Implementation
+// ============================================
+
+// CreateAlertChannel stores a new alert channel.
+func (s *BadgerStore) CreateAlertChannel(channel *models.AlertChannel) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := []byte(prefixAlertChannels + channel.ID)
+	data, err := json.Marshal(channel)
+	if err != nil {
+		return err
+	}
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		return txn.Set(key, data)
+	})
+}
+
+// UpdateAlertChannel updates an existing alert channel.
+func (s *BadgerStore) UpdateAlertChannel(channel *models.AlertChannel) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := []byte(prefixAlertChannels + channel.ID)
+	data, err := json.Marshal(channel)
+	if err != nil {
+		return err
+	}
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		// Check if exists
+		_, err := txn.Get(key)
+		if err == badger.ErrKeyNotFound {
+			return models.ErrAlertChannelNotFound
+		}
+		if err != nil {
+			return err
+		}
+		return txn.Set(key, data)
+	})
+}
+
+// GetAlertChannel retrieves an alert channel by ID.
+func (s *BadgerStore) GetAlertChannel(id string) (*models.AlertChannel, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var channel models.AlertChannel
+	err := s.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(prefixAlertChannels + id))
+		if err == badger.ErrKeyNotFound {
+			return models.ErrAlertChannelNotFound
+		}
+		if err != nil {
+			return err
+		}
+		return item.Value(func(val []byte) error {
+			return json.Unmarshal(val, &channel)
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &channel, nil
+}
+
+// DeleteAlertChannel deletes an alert channel by ID.
+func (s *BadgerStore) DeleteAlertChannel(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := []byte(prefixAlertChannels + id)
+	return s.db.Update(func(txn *badger.Txn) error {
+		_, err := txn.Get(key)
+		if err == badger.ErrKeyNotFound {
+			return models.ErrAlertChannelNotFound
+		}
+		if err != nil {
+			return err
+		}
+		return txn.Delete(key)
+	})
+}
+
+// ListAlertChannels returns all alert channels.
+func (s *BadgerStore) ListAlertChannels() ([]*models.AlertChannel, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var channels []*models.AlertChannel
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = []byte(prefixAlertChannels)
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			var channel models.AlertChannel
+			err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, &channel)
+			})
+			if err != nil {
+				return err
+			}
+			channels = append(channels, &channel)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return channels, nil
+}
+
+// CreateAlertRule stores a new alert rule.
+func (s *BadgerStore) CreateAlertRule(rule *models.AlertRule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := []byte(prefixAlertRules + rule.ID)
+	data, err := json.Marshal(rule)
+	if err != nil {
+		return err
+	}
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		return txn.Set(key, data)
+	})
+}
+
+// UpdateAlertRule updates an existing alert rule.
+func (s *BadgerStore) UpdateAlertRule(rule *models.AlertRule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := []byte(prefixAlertRules + rule.ID)
+	data, err := json.Marshal(rule)
+	if err != nil {
+		return err
+	}
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		_, err := txn.Get(key)
+		if err == badger.ErrKeyNotFound {
+			return models.ErrAlertRuleNotFound
+		}
+		if err != nil {
+			return err
+		}
+		return txn.Set(key, data)
+	})
+}
+
+// GetAlertRule retrieves an alert rule by ID.
+func (s *BadgerStore) GetAlertRule(id string) (*models.AlertRule, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var rule models.AlertRule
+	err := s.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(prefixAlertRules + id))
+		if err == badger.ErrKeyNotFound {
+			return models.ErrAlertRuleNotFound
+		}
+		if err != nil {
+			return err
+		}
+		return item.Value(func(val []byte) error {
+			return json.Unmarshal(val, &rule)
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &rule, nil
+}
+
+// DeleteAlertRule deletes an alert rule by ID.
+func (s *BadgerStore) DeleteAlertRule(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := []byte(prefixAlertRules + id)
+	return s.db.Update(func(txn *badger.Txn) error {
+		_, err := txn.Get(key)
+		if err == badger.ErrKeyNotFound {
+			return models.ErrAlertRuleNotFound
+		}
+		if err != nil {
+			return err
+		}
+		return txn.Delete(key)
+	})
+}
+
+// ListAlertRules returns all alert rules.
+func (s *BadgerStore) ListAlertRules() ([]*models.AlertRule, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var rules []*models.AlertRule
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = []byte(prefixAlertRules)
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			var rule models.AlertRule
+			err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, &rule)
+			})
+			if err != nil {
+				return err
+			}
+			rules = append(rules, &rule)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return rules, nil
 }

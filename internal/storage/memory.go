@@ -17,6 +17,8 @@ type MemoryStore struct {
 	scheduleStates map[string]*models.ScheduleState
 	locks          map[string]*lockInfo
 	versions       map[string][]*models.JobVersion // jobID -> versions
+	alertChannels  map[string]*models.AlertChannel
+	alertRules     map[string]*models.AlertRule
 	mu             sync.RWMutex
 }
 
@@ -33,6 +35,8 @@ func NewMemoryStore() *MemoryStore {
 		scheduleStates: make(map[string]*models.ScheduleState),
 		locks:          make(map[string]*lockInfo),
 		versions:       make(map[string][]*models.JobVersion),
+		alertChannels:  make(map[string]*models.AlertChannel),
+		alertRules:     make(map[string]*models.AlertRule),
 	}
 }
 
@@ -416,4 +420,134 @@ func (s *MemoryStore) Reset() {
 	s.scheduleStates = make(map[string]*models.ScheduleState)
 	s.locks = make(map[string]*lockInfo)
 	s.versions = make(map[string][]*models.JobVersion)
+	s.alertChannels = make(map[string]*models.AlertChannel)
+	s.alertRules = make(map[string]*models.AlertRule)
+}
+
+// ============================================
+// AlertStore Implementation
+// ============================================
+
+// CreateAlertChannel stores a new alert channel.
+func (s *MemoryStore) CreateAlertChannel(channel *models.AlertChannel) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	channelCopy := *channel
+	s.alertChannels[channel.ID] = &channelCopy
+	return nil
+}
+
+// UpdateAlertChannel updates an existing alert channel.
+func (s *MemoryStore) UpdateAlertChannel(channel *models.AlertChannel) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.alertChannels[channel.ID]; !exists {
+		return models.ErrAlertChannelNotFound
+	}
+
+	channelCopy := *channel
+	s.alertChannels[channel.ID] = &channelCopy
+	return nil
+}
+
+// GetAlertChannel retrieves an alert channel by ID.
+func (s *MemoryStore) GetAlertChannel(id string) (*models.AlertChannel, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	channel, exists := s.alertChannels[id]
+	if !exists {
+		return nil, models.ErrAlertChannelNotFound
+	}
+	channelCopy := *channel
+	return &channelCopy, nil
+}
+
+// DeleteAlertChannel deletes an alert channel by ID.
+func (s *MemoryStore) DeleteAlertChannel(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.alertChannels[id]; !exists {
+		return models.ErrAlertChannelNotFound
+	}
+	delete(s.alertChannels, id)
+	return nil
+}
+
+// ListAlertChannels returns all alert channels.
+func (s *MemoryStore) ListAlertChannels() ([]*models.AlertChannel, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	channels := make([]*models.AlertChannel, 0, len(s.alertChannels))
+	for _, channel := range s.alertChannels {
+		channelCopy := *channel
+		channels = append(channels, &channelCopy)
+	}
+	return channels, nil
+}
+
+// CreateAlertRule stores a new alert rule.
+func (s *MemoryStore) CreateAlertRule(rule *models.AlertRule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ruleCopy := *rule
+	s.alertRules[rule.ID] = &ruleCopy
+	return nil
+}
+
+// UpdateAlertRule updates an existing alert rule.
+func (s *MemoryStore) UpdateAlertRule(rule *models.AlertRule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.alertRules[rule.ID]; !exists {
+		return models.ErrAlertRuleNotFound
+	}
+
+	ruleCopy := *rule
+	s.alertRules[rule.ID] = &ruleCopy
+	return nil
+}
+
+// GetAlertRule retrieves an alert rule by ID.
+func (s *MemoryStore) GetAlertRule(id string) (*models.AlertRule, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rule, exists := s.alertRules[id]
+	if !exists {
+		return nil, models.ErrAlertRuleNotFound
+	}
+	ruleCopy := *rule
+	return &ruleCopy, nil
+}
+
+// DeleteAlertRule deletes an alert rule by ID.
+func (s *MemoryStore) DeleteAlertRule(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.alertRules[id]; !exists {
+		return models.ErrAlertRuleNotFound
+	}
+	delete(s.alertRules, id)
+	return nil
+}
+
+// ListAlertRules returns all alert rules.
+func (s *MemoryStore) ListAlertRules() ([]*models.AlertRule, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rules := make([]*models.AlertRule, 0, len(s.alertRules))
+	for _, rule := range s.alertRules {
+		ruleCopy := *rule
+		rules = append(rules, &ruleCopy)
+	}
+	return rules, nil
 }
