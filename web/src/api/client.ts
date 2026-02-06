@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ApiResponse, Job, JobsResponse, ExecutionsResponse, ClusterStatus, Execution } from '../types'
+import type { ApiResponse, Job, JobsResponse, ExecutionsResponse, ClusterStatus, ClusterDetails, ChronosConfig, Execution } from '../types'
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -88,6 +88,57 @@ export async function getClusterStatus(): Promise<ClusterStatus> {
   const { data } = await api.get<ApiResponse<ClusterStatus>>('/cluster/status')
   if (!data.success || !data.data) {
     throw new Error(data.error?.message || 'Failed to fetch cluster status')
+  }
+  return data.data
+}
+
+export async function getClusterDetails(): Promise<ClusterDetails> {
+  const { data } = await api.get<ApiResponse<ClusterDetails>>('/cluster/details')
+  if (!data.success || !data.data) {
+    throw new Error(data.error?.message || 'Failed to fetch cluster details')
+  }
+  return data.data
+}
+
+// All Executions
+export async function getAllExecutions(limit = 50): Promise<ExecutionsResponse> {
+  const { data } = await api.get<ApiResponse<ExecutionsResponse>>('/executions', {
+    params: { limit },
+  })
+  if (!data.success || !data.data) {
+    throw new Error(data.error?.message || 'Failed to fetch executions')
+  }
+  return data.data
+}
+
+// Config
+export async function getConfig(): Promise<ChronosConfig> {
+  const { data } = await api.get<ApiResponse<ChronosConfig>>('/config')
+  if (!data.success || !data.data) {
+    throw new Error(data.error?.message || 'Failed to fetch config')
+  }
+  return data.data
+}
+
+// Cancel execution
+export async function cancelExecution(jobId: string, executionId: string): Promise<void> {
+  const { data } = await api.post<ApiResponse<null>>(`/jobs/${jobId}/executions/${executionId}/cancel`)
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Failed to cancel execution')
+  }
+}
+
+// Trigger job with parameters
+export interface TriggerParams {
+  env?: Record<string, string>
+  headers?: Record<string, string>
+  body?: string
+}
+
+export async function triggerJobWithParams(id: string, params?: TriggerParams): Promise<Execution> {
+  const { data } = await api.post<ApiResponse<Execution>>(`/jobs/${id}/trigger`, params)
+  if (!data.success || !data.data) {
+    throw new Error(data.error?.message || 'Failed to trigger job')
   }
   return data.data
 }
