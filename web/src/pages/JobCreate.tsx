@@ -1,10 +1,17 @@
-import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import { useNavigate, Link } from 'react-router-dom'
-import { createJob } from '../api/client'
+import { useState, useEffect } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
+import { createJob, getJob } from '../api/client'
+import CronBuilder from '../components/CronBuilder'
+import CronExplainer from '../components/CronExplainer'
+import TimezonePicker from '../components/TimezonePicker'
+import WebhookTester from '../components/WebhookTester'
 
 export default function JobCreate() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const duplicateId = searchParams.get('duplicate')
+  const [showWebhookTester, setShowWebhookTester] = useState(false)
 
   const [form, setForm] = useState({
     name: '',
@@ -17,6 +24,30 @@ export default function JobCreate() {
     enabled: true,
     maxAttempts: 3,
   })
+
+  // Fetch job to duplicate if duplicateId is provided
+  const { data: sourceJob } = useQuery({
+    queryKey: ['job', duplicateId],
+    queryFn: () => getJob(duplicateId!),
+    enabled: !!duplicateId,
+  })
+
+  // Populate form when source job loads (for duplication)
+  useEffect(() => {
+    if (sourceJob) {
+      setForm({
+        name: `${sourceJob.name}-copy`,
+        description: sourceJob.description || '',
+        schedule: sourceJob.schedule,
+        timezone: sourceJob.timezone || '',
+        webhookUrl: sourceJob.webhook.url,
+        webhookMethod: sourceJob.webhook.method || 'GET',
+        timeout: sourceJob.timeout || '5m',
+        enabled: false, // Duplicated jobs start disabled for safety
+        maxAttempts: sourceJob.retry_policy?.max_attempts || 3,
+      })
+    }
+  }, [sourceJob])
 
   const mutation = useMutation({
     mutationFn: createJob,
@@ -47,9 +78,22 @@ export default function JobCreate() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Create New Job</h2>
+      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+        {duplicateId ? 'Duplicate Job' : 'Create New Job'}
+      </h2>
+      
+      {duplicateId && sourceJob && (
+        <div className="mb-4 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg flex items-center gap-2">
+          <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          <span className="text-sm text-purple-700 dark:text-purple-300">
+            Duplicating from <strong>{sourceJob.name}</strong>. Job will be created disabled.
+          </span>
+        </div>
+      )}
 
-      <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg">
+      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 shadow rounded-lg">
         <div className="px-4 py-5 sm:p-6 space-y-6">
           {/* Name */}
           <div>
@@ -84,36 +128,28 @@ export default function JobCreate() {
 
           {/* Schedule */}
           <div>
-            <label htmlFor="schedule" className="block text-sm font-medium text-gray-700">
-              Schedule (Cron Expression) *
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Schedule *
             </label>
-            <input
-              type="text"
-              id="schedule"
-              required
+            <CronBuilder
               value={form.schedule}
-              onChange={(e) => setForm({ ...form, schedule: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono"
-              placeholder="0 9 * * *"
+              onChange={(schedule) => setForm({ ...form, schedule })}
             />
-            <p className="mt-1 text-sm text-gray-500">
-              Examples: <code>* * * * *</code> (every minute), <code>0 9 * * *</code> (daily at 9am), <code>@hourly</code>
-            </p>
+            <CronExplainer expression={form.schedule} className="mt-3" />
           </div>
 
           {/* Timezone */}
           <div>
-            <label htmlFor="timezone" className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Timezone
             </label>
-            <input
-              type="text"
-              id="timezone"
+            <TimezonePicker
               value={form.timezone}
-              onChange={(e) => setForm({ ...form, timezone: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              placeholder="America/New_York (default: UTC)"
+              onChange={(timezone) => setForm({ ...form, timezone })}
             />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Leave empty for UTC
+            </p>
           </div>
 
           {/* Webhook URL */}
@@ -121,15 +157,29 @@ export default function JobCreate() {
             <label htmlFor="webhookUrl" className="block text-sm font-medium text-gray-700">
               Webhook URL *
             </label>
-            <input
-              type="url"
-              id="webhookUrl"
-              required
-              value={form.webhookUrl}
-              onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              placeholder="https://api.example.com/webhook"
-            />
+            <div className="mt-1 flex gap-2">
+              <input
+                type="url"
+                id="webhookUrl"
+                required
+                value={form.webhookUrl}
+                onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                placeholder="https://api.example.com/webhook"
+              />
+              <button
+                type="button"
+                onClick={() => setShowWebhookTester(true)}
+                disabled={!form.webhookUrl}
+                className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 whitespace-nowrap"
+                title="Test webhook URL"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Test
+              </button>
+            </div>
           </div>
 
           {/* HTTP Method */}
@@ -220,6 +270,15 @@ export default function JobCreate() {
           </button>
         </div>
       </form>
+
+      {/* Webhook Tester Modal */}
+      {showWebhookTester && (
+        <WebhookTester
+          url={form.webhookUrl}
+          method={form.webhookMethod}
+          onClose={() => setShowWebhookTester(false)}
+        />
+      )}
     </div>
   )
 }

@@ -1,13 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { getJob, updateJob } from '../api/client'
+import CronBuilder from '../components/CronBuilder'
+import CronExplainer from '../components/CronExplainer'
+import TimezonePicker from '../components/TimezonePicker'
+import RetryPolicyPreview from '../components/RetryPolicyPreview'
+import JobDiffView from '../components/JobDiffView'
+import WebhookTester from '../components/WebhookTester'
 import type { Job } from '../types'
 
 export default function JobEdit() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [showDiff, setShowDiff] = useState(false)
+  const [showWebhookTester, setShowWebhookTester] = useState(false)
 
   const { data: job, isLoading } = useQuery({
     queryKey: ['job', id],
@@ -101,6 +109,29 @@ export default function JobEdit() {
     })
   }
 
+  // Build current form state as a Job-like object for diff comparison
+  const currentFormAsJob = useMemo(() => ({
+    name: form.name,
+    description: form.description || undefined,
+    schedule: form.schedule,
+    timezone: form.timezone || undefined,
+    webhook: {
+      url: form.webhookUrl,
+      method: form.webhookMethod,
+      headers: form.webhookHeaders ? JSON.parse(form.webhookHeaders || '{}') : undefined,
+      body: form.webhookBody || undefined,
+    },
+    timeout: form.timeout,
+    concurrency: form.concurrency as 'allow' | 'forbid' | 'replace' | undefined,
+    retry_policy: {
+      max_attempts: form.maxAttempts,
+      initial_interval: form.initialInterval,
+      max_interval: form.maxInterval,
+      multiplier: form.multiplier,
+    },
+    enabled: form.enabled,
+  }), [form])
+
   if (isLoading) {
     return <div className="text-center py-12">Loading job...</div>
   }
@@ -146,35 +177,28 @@ export default function JobEdit() {
 
           {/* Schedule */}
           <div>
-            <label htmlFor="schedule" className="block text-sm font-medium text-gray-700">
-              Schedule (Cron Expression) *
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Schedule *
             </label>
-            <input
-              type="text"
-              id="schedule"
-              required
+            <CronBuilder
               value={form.schedule}
-              onChange={(e) => setForm({ ...form, schedule: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono"
+              onChange={(schedule) => setForm({ ...form, schedule })}
             />
-            <p className="mt-1 text-sm text-gray-500">
-              Examples: <code>* * * * *</code> (every minute), <code>0 9 * * *</code> (daily at 9am), <code>@hourly</code>
-            </p>
+            <CronExplainer expression={form.schedule} className="mt-3" />
           </div>
 
           {/* Timezone */}
           <div>
-            <label htmlFor="timezone" className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Timezone
             </label>
-            <input
-              type="text"
-              id="timezone"
+            <TimezonePicker
               value={form.timezone}
-              onChange={(e) => setForm({ ...form, timezone: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              placeholder="America/New_York (default: UTC)"
+              onChange={(timezone) => setForm({ ...form, timezone })}
             />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Leave empty for UTC
+            </p>
           </div>
 
           <hr className="border-gray-200" />
@@ -185,14 +209,28 @@ export default function JobEdit() {
             <label htmlFor="webhookUrl" className="block text-sm font-medium text-gray-700">
               URL *
             </label>
-            <input
-              type="url"
-              id="webhookUrl"
-              required
-              value={form.webhookUrl}
-              onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            />
+            <div className="mt-1 flex gap-2">
+              <input
+                type="url"
+                id="webhookUrl"
+                required
+                value={form.webhookUrl}
+                onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setShowWebhookTester(true)}
+                disabled={!form.webhookUrl}
+                className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 whitespace-nowrap"
+                title="Test webhook URL"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Test
+              </button>
+            </div>
           </div>
 
           {/* HTTP Method */}
@@ -347,6 +385,16 @@ export default function JobEdit() {
             </div>
           </div>
 
+          {/* Retry Policy Preview */}
+          <RetryPolicyPreview
+            policy={{
+              max_attempts: form.maxAttempts,
+              initial_interval: form.initialInterval,
+              max_interval: form.maxInterval,
+              multiplier: form.multiplier,
+            }}
+          />
+
           {/* Enabled */}
           <div className="flex items-center">
             <input
@@ -378,6 +426,13 @@ export default function JobEdit() {
             Cancel
           </Link>
           <button
+            type="button"
+            onClick={() => setShowDiff(true)}
+            className="inline-flex justify-center rounded-md border border-indigo-300 bg-white py-2 px-4 text-sm font-medium text-indigo-600 shadow-sm hover:bg-indigo-50"
+          >
+            Preview Changes
+          </button>
+          <button
             type="submit"
             disabled={mutation.isPending}
             className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none disabled:opacity-50"
@@ -386,6 +441,32 @@ export default function JobEdit() {
           </button>
         </div>
       </form>
+
+      {/* Diff Modal */}
+      {showDiff && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="max-w-2xl w-full max-h-[80vh] overflow-auto">
+            <JobDiffView
+              original={job}
+              modified={currentFormAsJob}
+              onClose={() => setShowDiff(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Webhook Tester Modal */}
+      {showWebhookTester && (
+        <WebhookTester
+          url={form.webhookUrl}
+          method={form.webhookMethod}
+          headers={(() => {
+            try { return JSON.parse(form.webhookHeaders || '{}') } catch { return {} }
+          })()}
+          body={form.webhookBody}
+          onClose={() => setShowWebhookTester(false)}
+        />
+      )}
     </div>
   )
 }

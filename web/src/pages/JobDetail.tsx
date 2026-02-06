@@ -1,12 +1,17 @@
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { getJob, getExecutions, deleteJob, enableJob, disableJob, triggerJob } from '../api/client'
+import { getJob, getExecutions, deleteJob, enableJob, disableJob, cancelExecution } from '../api/client'
 import { format } from 'date-fns'
+import TriggerModal from '../components/TriggerModal'
+import JobHistory from '../components/JobHistory'
+import DurationChart from '../components/DurationChart'
 
 export default function JobDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [showTriggerModal, setShowTriggerModal] = useState(false)
 
   const { data: job, isLoading: jobLoading } = useQuery({
     queryKey: ['job', id],
@@ -30,8 +35,8 @@ export default function JobDetail() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['job', id] }),
   })
 
-  const triggerMutation = useMutation({
-    mutationFn: () => triggerJob(id!),
+  const cancelMutation = useMutation({
+    mutationFn: (executionId: string) => cancelExecution(id!, executionId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['executions', id] }),
   })
 
@@ -68,17 +73,28 @@ export default function JobDetail() {
         </div>
         <div className="flex space-x-2">
           <button
-            onClick={() => triggerMutation.mutate()}
-            disabled={triggerMutation.isPending}
-            className="px-4 py-2 text-sm text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50"
+            onClick={() => setShowTriggerModal(true)}
+            className="px-4 py-2 text-sm text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
           >
-            {triggerMutation.isPending ? 'Triggering...' : 'Trigger Now'}
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            </svg>
+            Trigger
           </button>
           <Link
             to={`/jobs/${id}/edit`}
             className="px-4 py-2 text-sm text-indigo-600 border border-indigo-300 rounded hover:bg-indigo-50"
           >
             Edit
+          </Link>
+          <Link
+            to={`/jobs/create?duplicate=${id}`}
+            className="px-4 py-2 text-sm text-purple-600 border border-purple-300 rounded hover:bg-purple-50 flex items-center gap-1"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            Duplicate
           </Link>
           <button
             onClick={() => toggleMutation.mutate()}
@@ -157,6 +173,19 @@ export default function JobDetail() {
         </div>
       </div>
 
+      {/* Charts and History Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Duration Chart - takes 2 columns */}
+        <div className="lg:col-span-2">
+          {executionsData && (
+            <DurationChart executions={executionsData.executions} />
+          )}
+        </div>
+        
+        {/* Job History - takes 1 column */}
+        <JobHistory job={job} />
+      </div>
+
       {/* Executions */}
       <div className="bg-white shadow rounded-lg">
         <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
@@ -177,6 +206,7 @@ export default function JobDetail() {
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attempts</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Response</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -199,6 +229,20 @@ export default function JobDetail() {
                       <td className="px-3 py-4 text-sm text-gray-500 max-w-xs truncate">
                         {exec.error || exec.response || '-'}
                       </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        {(exec.status === 'running' || exec.status === 'pending') && (
+                          <button
+                            onClick={() => cancelMutation.mutate(exec.id)}
+                            disabled={cancelMutation.isPending}
+                            className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            Cancel
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -213,6 +257,15 @@ export default function JobDetail() {
           ← Back to Jobs
         </Link>
       </div>
+
+      {/* Trigger Modal */}
+      {showTriggerModal && (
+        <TriggerModal
+          jobId={id!}
+          jobName={job.name}
+          onClose={() => setShowTriggerModal(false)}
+        />
+      )}
     </div>
   )
 }

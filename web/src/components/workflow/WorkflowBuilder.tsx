@@ -75,7 +75,6 @@ export const NODE_TYPES: Record<NodeType, { label: string; color: string; icon: 
 interface WorkflowBuilderProps {
   workflow?: Workflow;
   onChange?: (workflow: Workflow) => void;
-  onSave?: (workflow: Workflow) => void;
   readOnly?: boolean;
   showStatus?: boolean;
 }
@@ -83,7 +82,6 @@ interface WorkflowBuilderProps {
 export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
   workflow: initialWorkflow,
   onChange,
-  onSave,
   readOnly = false,
   showStatus = false,
 }) => {
@@ -101,7 +99,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
   const [dragOffset, setDragOffset] = useState<Position>({ x: 0, y: 0 });
   const [connecting, setConnecting] = useState<{ nodeId: string; port: string } | null>(null);
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState<Position>({ x: 0, y: 0 });
+  const [pan] = useState<Position>({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Update parent when workflow changes
@@ -331,18 +329,18 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
 
         {/* Node body */}
         <div className="p-2 text-sm text-gray-600">
-          {node.type === 'job' && node.config.jobId && (
+          {node.type === 'job' && node.config.jobId ? (
             <div className="truncate">Job: {String(node.config.jobId)}</div>
-          )}
-          {node.type === 'trigger' && node.config.schedule && (
+          ) : null}
+          {node.type === 'trigger' && node.config.schedule ? (
             <div className="truncate">Schedule: {String(node.config.schedule)}</div>
-          )}
-          {node.type === 'delay' && node.config.duration && (
+          ) : null}
+          {node.type === 'delay' && node.config.duration ? (
             <div className="truncate">Wait: {String(node.config.duration)}</div>
-          )}
-          {node.type === 'condition' && node.config.expression && (
+          ) : null}
+          {node.type === 'condition' && node.config.expression ? (
             <div className="truncate">If: {String(node.config.expression)}</div>
-          )}
+          ) : null}
         </div>
 
         {/* Input ports */}
