@@ -53,6 +53,7 @@ func (h *APIHandler) Routes() chi.Router {
 	r.Post("/migrate", h.Migrate)
 	r.Post("/validate", h.Validate)
 	r.Post("/preview", h.Preview)
+	r.Post("/diff", h.DiffPreview)
 
 	// Source-specific endpoints
 	r.Post("/kubernetes", h.MigrateKubernetes)
@@ -60,6 +61,7 @@ func (h *APIHandler) Routes() chi.Router {
 	r.Post("/eventbridge", h.MigrateEventBridge)
 	r.Post("/temporal", h.MigrateTemporal)
 	r.Post("/github-actions", h.MigrateGitHubActions)
+	r.Post("/crontab", h.MigrateCrontab)
 
 	return r
 }
@@ -110,6 +112,13 @@ func (h *APIHandler) ListSources(w http.ResponseWriter, r *http.Request) {
 			Description: "Import GitHub Actions workflow schedules",
 			DocsURL:     "https://docs.github.com/en/actions",
 			InputFormat: "github_workflow",
+		},
+		{
+			Type:        SourceCrontab,
+			Name:        "Unix Crontab",
+			Description: "Import Unix crontab files",
+			DocsURL:     "https://man7.org/linux/man-pages/man5/crontab.5.html",
+			InputFormat: "crontab",
 		},
 	}
 
@@ -231,6 +240,54 @@ func (h *APIHandler) MigrateTemporal(w http.ResponseWriter, r *http.Request) {
 // MigrateGitHubActions handles POST /migration/github-actions.
 func (h *APIHandler) MigrateGitHubActions(w http.ResponseWriter, r *http.Request) {
 	h.migrateFromBody(w, r, SourceGitHubActions)
+}
+
+// MigrateCrontab handles POST /migration/crontab.
+func (h *APIHandler) MigrateCrontab(w http.ResponseWriter, r *http.Request) {
+	h.migrateFromBody(w, r, SourceCrontab)
+}
+
+// DiffPreview handles POST /migration/diff - shows differences between source and target.
+func (h *APIHandler) DiffPreview(w http.ResponseWriter, r *http.Request) {
+	var req MigrateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
+		return
+	}
+
+	result, err := h.migrator.Migrate(r.Context(), req.SourceType, []byte(req.Data))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "MIGRATION_ERROR", err.Error())
+		return
+	}
+
+	// Generate diff summary for each job
+	diffs := make([]map[string]interface{}, 0, len(result.Jobs))
+	for _, job := range result.Jobs {
+		diff := map[string]interface{}{
+			"job_name":    job.Name,
+			"job_id":      job.ID,
+			"operation":   "CREATE",
+			"changes": map[string]interface{}{
+				"schedule":    job.Schedule,
+				"description": job.Description,
+				"tags":        job.Tags,
+				"enabled":     job.Enabled,
+			},
+		}
+		diffs = append(diffs, diff)
+	}
+
+	h.writeJSON(w, http.StatusOK, APIResponse{
+		Success: true,
+		Data: map[string]interface{}{
+			"source_type":  req.SourceType,
+			"total_jobs":   len(result.Jobs),
+			"total_errors": len(result.Errors),
+			"diffs":        diffs,
+			"dry_run":      true,
+		},
+	})
 }
 
 func (h *APIHandler) migrateFromBody(w http.ResponseWriter, r *http.Request, sourceType SourceType) {
