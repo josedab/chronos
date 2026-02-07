@@ -218,3 +218,232 @@
 .ctaButtons .button--secondary:hover {
   background: rgba(255, 255, 255, 0.1);
 }
+
+/* Trusted By Section */
+.trustedBy {
+  padding: 3rem 0;
+  background: var(--ifm-color-emphasis-100);
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.trustedByTitle {
+  text-align: center;
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 2rem;
+}
+
+.trustedByStats {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4rem;
+  flex-wrap: wrap;
+}
+
+.statItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.statNumber {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--ifm-color-primary);
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.statLabel {
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-600);
+}
+
+@media (max-width: 768px) {
+  .trustedByStats {
+    gap: 2rem;
+  }
+  
+  .statNumber {
+    font-size: 2rem;
+  }
+}
+
+/* Use Cases Section */
+.useCases {
+  padding: 4rem 0;
+  background: var(--ifm-background-color);
+}
+
+.useCasesSubtitle {
+  color: var(--ifm-color-emphasis-600);
+  max-width: 600px;
+  margin: 0 auto 2rem auto;
+}
+
+.useCaseGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.useCaseCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: var(--ifm-card-background-color);
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.useCaseCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.useCaseIcon {
+  font-size: 1.75rem;
+  flex-shrink: 0;
+}
+
+.useCaseContent h4 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+}
+
+.useCaseContent p {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.useCaseSchedule {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--ifm-color-emphasis-200);
+  border-radius: 4px;
+  color: var(--ifm-color-primary-dark);
+}
+
+/* Testimonials Section */
+.testimonials {
+  padding: 4rem 0;
+  background: var(--ifm-color-emphasis-100);
+}
+
+.testimonialGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.testimonialCard {
+  background: var(--ifm-card-background-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.testimonialQuote {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--ifm-color-emphasis-800);
+  margin: 0 0 1rem 0;
+  font-style: italic;
+}
+
+.testimonialAuthor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.testimonialAuthor strong {
+  color: var(--ifm-color-emphasis-900);
+}
+
+.testimonialAuthor span {
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-600);
+}
+
+/* Why Chronos / Comparison Section */
+.whyChronos {
+  padding: 4rem 0;
+  background: var(--ifm-background-color);
+}
+
+.whyChronosSubtitle {
+  color: var(--ifm-color-emphasis-600);
+  max-width: 600px;
+  margin: 0 auto 2rem auto;
+}
+
+.comparisonTable {
+  max-width: 900px;
+  margin: 0 auto;
+  overflow-x: auto;
+}
+
+.comparisonTable table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.comparisonTable th,
+.comparisonTable td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.comparisonTable th {
+  background: var(--ifm-color-emphasis-100);
+  font-weight: 600;
+}
+
+.comparisonTable th.highlighted,
+.comparisonTable td.highlighted {
+  background: rgba(79, 70, 229, 0.1);
+  color: var(--ifm-color-primary);
+  font-weight: 600;
+}
+
+[data-theme='dark'] .comparisonTable th.highlighted,
+[data-theme='dark'] .comparisonTable td.highlighted {
+  background: rgba(129, 140, 248, 0.15);
+}
+
+/* CTA Links */
+.ctaLinks {
+  margin-top: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ctaLinks a {
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.ctaLinks a:hover {
+  color: white;
+  text-decoration: underline;
+}
+
+.ctaLinks span {
+  color: rgba(255, 255, 255, 0.4);
+}
