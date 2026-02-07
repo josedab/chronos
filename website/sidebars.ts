@@ -64,6 +64,7 @@ const sidebars: SidebarsConfig = {
         'resources/comparison',
         'resources/troubleshooting',
         'resources/faq',
+        'resources/contributing',
         'resources/changelog',
       ],
     },

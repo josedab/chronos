@@ -204,6 +204,8 @@ logging:
 
 See [API Documentation](docs/api.md) for the complete API reference.
 
+See [CLI Reference](docs/cli.md) for the `chronosctl` command-line tool.
+
 ### Endpoints
 
 | Method | Path | Description |

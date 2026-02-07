@@ -3,7 +3,9 @@
 ## Contents
 
 - [API Reference](api.md) - Complete REST API documentation
+- [CLI Reference](cli.md) - `chronosctl` command-line interface
 - [Architecture](architecture.md) - System architecture with diagrams
+- [Architecture Overview](ARCHITECTURE_OVERVIEW.md) - Detailed architecture documentation
 - [Features API Reference](features-api.md) - Next-gen features API documentation
 - [Troubleshooting Guide](troubleshooting.md) - Common issues and solutions
 - [Architecture Decision Records](adr/) - Key design decisions
