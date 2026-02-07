@@ -32,6 +32,7 @@ const (
 	SourceAWSEventBridge    SourceType = "aws_eventbridge"
 	SourceTemporalSchedule  SourceType = "temporal_schedule"
 	SourceGitHubActions     SourceType = "github_actions"
+	SourceCrontab           SourceType = "crontab"
 )
 
 // MigrationResult contains the result of a migration operation.
@@ -80,6 +81,7 @@ func NewMigrator() *Migrator {
 	m.converters[SourceAWSEventBridge] = &EventBridgeConverter{}
 	m.converters[SourceTemporalSchedule] = &TemporalConverter{}
 	m.converters[SourceGitHubActions] = &GitHubActionsConverter{}
+	m.converters[SourceCrontab] = &CrontabConverter{}
 
 	return m
 }
@@ -837,4 +839,202 @@ func (c *GitHubActionsConverter) ConvertWorkflows(ctx context.Context, input []b
 	}
 
 	return []*dag.Workflow{workflow}, nil, nil
+}
+
+// CrontabConverter converts Unix crontab files to Chronos jobs.
+type CrontabConverter struct{}
+
+// CrontabEntry represents a single crontab entry.
+type CrontabEntry struct {
+	Schedule string
+	User     string
+	Command  string
+	Comment  string
+	EnvVars  map[string]string
+}
+
+func (c *CrontabConverter) Validate(input []byte) error {
+	lines := strings.Split(string(input), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Skip environment variable assignments
+		if strings.Contains(line, "=") && !strings.HasPrefix(line, "*") &&
+			!strings.HasPrefix(line, "@") && len(strings.Fields(line)) < 6 {
+			continue
+		}
+		// Try to parse as cron entry
+		if _, err := c.parseCrontabLine(line); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *CrontabConverter) ConvertJobs(ctx context.Context, input []byte) ([]*models.Job, []MigrationError, error) {
+	lines := strings.Split(string(input), "\n")
+	jobs := make([]*models.Job, 0)
+	migrationErrors := make([]MigrationError, 0)
+	envVars := make(map[string]string)
+
+	for lineNum, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		// Skip comments (but save for descriptions)
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Handle environment variable assignments
+		if strings.Contains(line, "=") && !strings.HasPrefix(line, "*") &&
+			!strings.HasPrefix(line, "@") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				envVars[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			}
+			continue
+		}
+
+		// Parse cron entry
+		entry, err := c.parseCrontabLine(line)
+		if err != nil {
+			migrationErrors = append(migrationErrors, MigrationError{
+				ItemName: fmt.Sprintf("line_%d", lineNum+1),
+				ItemType: "crontab_entry",
+				Error:    err.Error(),
+				Line:     lineNum + 1,
+			})
+			continue
+		}
+
+		// Generate job name from command
+		jobName := c.generateJobName(entry.Command)
+
+		job := &models.Job{
+			ID:          uuid.New().String(),
+			Name:        jobName,
+			Description: fmt.Sprintf("Migrated from crontab. Original command: %s", entry.Command),
+			Schedule:    entry.Schedule,
+			Enabled:     true,
+			Tags: map[string]string{
+				"migration_source": "crontab",
+				"original_command": entry.Command,
+			},
+			Webhook: &models.WebhookConfig{
+				URL:    "http://localhost:8080/cron-executor",
+				Method: "POST",
+				Headers: map[string]string{
+					"Content-Type":       "application/json",
+					"X-Migration-Source": "crontab",
+				},
+				Body: c.buildExecutorBody(entry, envVars),
+			},
+			RetryPolicy: models.DefaultRetryPolicy(),
+			CreatedAt:   time.Now().UTC(),
+			UpdatedAt:   time.Now().UTC(),
+			Version:     1,
+		}
+
+		jobs = append(jobs, job)
+	}
+
+	if len(migrationErrors) > 0 && len(jobs) > 0 {
+		return jobs, migrationErrors, ErrPartialMigration
+	}
+
+	return jobs, migrationErrors, nil
+}
+
+func (c *CrontabConverter) ConvertWorkflows(ctx context.Context, input []byte) ([]*dag.Workflow, []MigrationError, error) {
+	return nil, nil, nil // Crontab entries are individual jobs, not workflows
+}
+
+func (c *CrontabConverter) parseCrontabLine(line string) (*CrontabEntry, error) {
+	// Handle special schedule shortcuts
+	schedule := ""
+	command := ""
+
+	if strings.HasPrefix(line, "@") {
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("invalid @schedule entry: %s", line)
+		}
+		schedule = parts[0]
+		command = strings.TrimSpace(parts[1])
+	} else {
+		// Standard cron format: min hour day month dow command
+		fields := strings.Fields(line)
+		if len(fields) < 6 {
+			return nil, fmt.Errorf("invalid cron entry (need at least 6 fields): %s", line)
+		}
+		schedule = strings.Join(fields[:5], " ")
+		command = strings.Join(fields[5:], " ")
+	}
+
+	return &CrontabEntry{
+		Schedule: schedule,
+		Command:  command,
+	}, nil
+}
+
+func (c *CrontabConverter) generateJobName(command string) string {
+	// Extract a reasonable name from the command
+	command = strings.TrimSpace(command)
+	
+	// Remove common shell prefixes
+	prefixes := []string{"/bin/sh -c ", "/bin/bash -c ", "sh -c ", "bash -c "}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(command, prefix) {
+			command = strings.TrimPrefix(command, prefix)
+			break
+		}
+	}
+
+	// Get first word of command as base name
+	parts := strings.Fields(command)
+	if len(parts) == 0 {
+		return "cron-job-" + uuid.New().String()[:8]
+	}
+
+	baseName := parts[0]
+	// Remove path prefix
+	if idx := strings.LastIndex(baseName, "/"); idx >= 0 {
+		baseName = baseName[idx+1:]
+	}
+
+	// Clean up special characters
+	baseName = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '_' {
+			return r
+		}
+		return '-'
+	}, baseName)
+
+	// Trim and ensure not empty
+	baseName = strings.Trim(baseName, "-_")
+	if baseName == "" {
+		baseName = "cron-job"
+	}
+
+	return baseName + "-" + uuid.New().String()[:8]
+}
+
+func (c *CrontabConverter) buildExecutorBody(entry *CrontabEntry, envVars map[string]string) string {
+	body := map[string]interface{}{
+		"command": entry.Command,
+	}
+	if len(envVars) > 0 {
+		body["environment"] = envVars
+	}
+
+	jsonBody, _ := json.Marshal(body)
+	return string(jsonBody)
 }
