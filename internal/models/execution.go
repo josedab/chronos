@@ -20,9 +20,16 @@ type Execution struct {
 	NodeID        string          `json:"node_id,omitempty"`
 
 	// Debug information for replay
-	Request      *ExecutionRequest `json:"request,omitempty"`
-	ReplayOf     string            `json:"replay_of,omitempty"`     // ID of original execution if this is a replay
-	ReplayCount  int               `json:"replay_count,omitempty"`  // Number of times this execution has been replayed
+	Request      *ExecutionRequest  `json:"request,omitempty"`
+	ReplayOf     string             `json:"replay_of,omitempty"`
+	ReplayCount  int                `json:"replay_count,omitempty"`
+
+	// Assertion results
+	AssertionResult *AssertionResult `json:"assertion_result,omitempty"`
+
+	// Tracing
+	TraceID string `json:"trace_id,omitempty"`
+	SpanID  string `json:"span_id,omitempty"`
 }
 
 // ExecutionRequest captures the original request for debugging and replay.

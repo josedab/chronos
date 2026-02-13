@@ -21,6 +21,10 @@ type Job struct {
 	// Execution config
 	Webhook *WebhookConfig `json:"webhook,omitempty"`
 
+	// Shadow/Canary execution
+	ShadowWebhook *WebhookConfig `json:"shadow_webhook,omitempty"`
+	CanaryPercent int            `json:"canary_percent,omitempty"` // 0-100, percentage routed to shadow
+
 	// Retry policy
 	RetryPolicy *RetryPolicy `json:"retry_policy,omitempty"`
 
@@ -64,6 +68,50 @@ type WebhookConfig struct {
 	Body         string            `json:"body,omitempty"`
 	Auth         *AuthConfig       `json:"auth,omitempty"`
 	SuccessCodes []int             `json:"success_codes,omitempty"` // Default: 200-299
+	Assertions   *ResponseAssertions `json:"assertions,omitempty"`
+}
+
+// ResponseAssertions defines expected response characteristics.
+type ResponseAssertions struct {
+	// MaxResponseTime is the maximum acceptable response time.
+	MaxResponseTime Duration `json:"max_response_time,omitempty"`
+	// BodyContains checks that the response body contains all specified strings.
+	BodyContains []string `json:"body_contains,omitempty"`
+	// BodyNotContains checks that the response body does not contain any specified strings.
+	BodyNotContains []string `json:"body_not_contains,omitempty"`
+	// JSONPathMatchers checks specific JSON path values.
+	JSONPathMatchers []JSONPathMatcher `json:"json_path,omitempty"`
+	// Mode controls assertion behavior: "enforce" fails the execution, "warn" logs only.
+	Mode AssertionMode `json:"mode,omitempty"`
+}
+
+// JSONPathMatcher asserts a value at a simple dot-notation path.
+type JSONPathMatcher struct {
+	Path     string `json:"path"`               // e.g. "status", "data.count"
+	Expected string `json:"expected"`            // expected value as string
+	Operator string `json:"operator,omitempty"`  // "equals" (default), "contains", "not_empty"
+}
+
+// AssertionMode controls how assertion failures are handled.
+type AssertionMode string
+
+const (
+	AssertionModeEnforce AssertionMode = "enforce"
+	AssertionModeWarn    AssertionMode = "warn"
+)
+
+// AssertionResult holds the outcome of response assertions.
+type AssertionResult struct {
+	Passed     bool               `json:"passed"`
+	Violations []AssertionViolation `json:"violations,omitempty"`
+}
+
+// AssertionViolation describes a single assertion failure.
+type AssertionViolation struct {
+	Type     string `json:"type"`     // "response_time", "body_contains", "body_not_contains", "json_path"
+	Expected string `json:"expected"`
+	Actual   string `json:"actual"`
+	Message  string `json:"message"`
 }
 
 // AuthConfig defines authentication for webhooks.
