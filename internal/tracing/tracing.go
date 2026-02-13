@@ -3,6 +3,7 @@ package tracing
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -160,6 +161,25 @@ func (c HeaderCarrier) Set(key, value string) {
 }
 
 func (c HeaderCarrier) Keys() []string {
+	keys := make([]string, 0, len(c))
+	for k := range c {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// HTTPHeaderCarrier adapts net/http.Header to propagation.TextMapCarrier.
+type HTTPHeaderCarrier http.Header
+
+func (c HTTPHeaderCarrier) Get(key string) string {
+	return http.Header(c).Get(key)
+}
+
+func (c HTTPHeaderCarrier) Set(key, value string) {
+	http.Header(c).Set(key, value)
+}
+
+func (c HTTPHeaderCarrier) Keys() []string {
 	keys := make([]string, 0, len(c))
 	for k := range c {
 		keys = append(keys, k)
