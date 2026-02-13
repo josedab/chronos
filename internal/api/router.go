@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/chronos/chronos/internal/tracing"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -37,6 +38,7 @@ func NewRouterWithConfig(handler *Handler, logger zerolog.Logger, config RouterC
 	// Middleware
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	r.Use(tracing.Middleware("chronos"))
 	r.Use(NewLoggingMiddleware(logger))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
