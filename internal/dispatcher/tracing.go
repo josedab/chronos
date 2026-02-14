@@ -198,9 +198,9 @@ func (d *TracedDispatcher) GetMetricsWithTraceContext(ctx context.Context) map[s
 	spanCtx := span.SpanContext()
 
 	metrics := map[string]interface{}{
-		"executions_total":   d.metrics.ExecutionsTotal,
-		"executions_success": d.metrics.ExecutionsSuccess,
-		"executions_failed":  d.metrics.ExecutionsFailed,
+		"executions_total":   d.metrics.ExecutionsTotal.Load(),
+		"executions_success": d.metrics.ExecutionsSuccess.Load(),
+		"executions_failed":  d.metrics.ExecutionsFailed.Load(),
 	}
 
 	if spanCtx.HasTraceID() {
