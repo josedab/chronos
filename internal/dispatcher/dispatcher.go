@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/chronos/chronos/internal/models"
+	"github.com/chronos/chronos/internal/tracing"
 	"github.com/google/uuid"
 )
 
@@ -34,6 +35,9 @@ type Dispatcher struct {
 
 	// Circuit breakers for endpoint resilience
 	circuitBreakers *CircuitBreakerRegistry
+
+	// Webhook signing
+	signing *SigningConfig
 
 	// Metrics
 	metrics *Metrics
@@ -64,6 +68,10 @@ type Config struct {
 	MaxResponseSize int64
 	// CircuitBreaker configures circuit breaker behavior (optional).
 	CircuitBreaker *CircuitBreakerConfig
+	// Signing configures HMAC webhook payload signing (optional).
+	Signing *SigningConfig
+	// MTLS configures mutual TLS for webhook dispatch (optional).
+	MTLS *MTLSConfig
 }
 
 // DefaultConfig returns the default dispatcher configuration.
@@ -96,6 +104,14 @@ func New(cfg *Config) *Dispatcher {
 		DisableKeepAlives:   false,
 	}
 
+	// Apply mTLS configuration if provided
+	if cfg.MTLS != nil {
+		mtlsTransport, err := buildMTLSTransport(cfg.MTLS, transport)
+		if err == nil {
+			transport = mtlsTransport
+		}
+	}
+
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   cfg.Timeout,
@@ -109,6 +125,7 @@ func New(cfg *Config) *Dispatcher {
 		maxResponseSize: maxRespSize,
 		semaphore:       make(chan struct{}, cfg.MaxConcurrent),
 		circuitBreakers: NewCircuitBreakerRegistry(cfg.CircuitBreaker),
+		signing:         cfg.Signing,
 		metrics:         &Metrics{},
 	}
 }
@@ -123,6 +140,10 @@ func (d *Dispatcher) Execute(ctx context.Context, job *models.Job, scheduledTime
 		return nil, ctx.Err()
 	}
 
+	// Start execution trace span
+	ctx, span := tracing.StartJobExecutionSpan(ctx, job.ID, job.Name, "")
+	defer span.End()
+
 	execution := &models.Execution{
 		ID:            uuid.New().String(),
 		JobID:         job.ID,
@@ -133,6 +154,18 @@ func (d *Dispatcher) Execute(ctx context.Context, job *models.Job, scheduledTime
 		Attempts:      0,
 		NodeID:        d.nodeID,
 	}
+
+	// Capture trace and span IDs for correlation
+	sc := span.SpanContext()
+	if sc.HasTraceID() {
+		execution.TraceID = sc.TraceID().String()
+	}
+	if sc.HasSpanID() {
+		execution.SpanID = sc.SpanID().String()
+	}
+
+	// Update span with execution ID
+	tracing.AddJobAttributes(span, job.ID, job.Name)
 
 	// Track running execution
 	execCtx, cancel := context.WithCancel(ctx)
@@ -177,6 +210,19 @@ func (d *Dispatcher) Execute(ctx context.Context, job *models.Job, scheduledTime
 			execution.StatusCode = result.StatusCode
 			execution.Response = result.Response
 			execution.Duration = time.Since(execution.StartedAt)
+
+			// Evaluate response assertions
+			if job.Webhook != nil && job.Webhook.Assertions != nil {
+				ar := EvaluateAssertions(job.Webhook.Assertions, result, execution.Duration)
+				execution.AssertionResult = ar
+				if ar != nil && !ar.Passed && job.Webhook.Assertions.Mode != models.AssertionModeWarn {
+					execution.Status = models.ExecutionFailed
+					execution.Error = fmt.Sprintf("assertion failed: %s", ar.Violations[0].Message)
+					d.metrics.ExecutionsTotal.Add(1)
+					d.metrics.ExecutionsFailed.Add(1)
+					return execution, nil
+				}
+			}
 
 			d.metrics.ExecutionsTotal.Add(1)
 			d.metrics.ExecutionsSuccess.Add(1)
@@ -290,6 +336,12 @@ func (d *Dispatcher) executeWebhook(ctx context.Context, config *models.WebhookC
 			}, err
 		}
 	}
+
+	// Apply webhook payload signing
+	applyWebhookSignature(req, d.signing, config.Body)
+
+	// Propagate trace context into outbound request (traceparent header)
+	tracing.InjectTraceContext(ctx, tracing.HTTPHeaderCarrier(req.Header))
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
