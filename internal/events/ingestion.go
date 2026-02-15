@@ -102,6 +102,18 @@ type IngestorMetrics struct {
 	LastEventTime    time.Time        `json:"last_event_time"`
 }
 
+// IngestorMetricsSnapshot is a point-in-time copy of metrics without sync primitives.
+type IngestorMetricsSnapshot struct {
+	TotalReceived    int64                 `json:"total_received"`
+	TotalProcessed   int64                 `json:"total_processed"`
+	TotalFailed      int64                 `json:"total_failed"`
+	BySource         map[EventSource]int64 `json:"by_source"`
+	ByType           map[string]int64      `json:"by_type"`
+	ProcessingTimeMs float64               `json:"avg_processing_time_ms"`
+	QueueDepth       int64                 `json:"queue_depth"`
+	LastEventTime    time.Time             `json:"last_event_time"`
+}
+
 // EventAdapter converts source-specific events to normalized format.
 type EventAdapter interface {
 	// Parse parses raw data into a normalized event.
@@ -325,12 +337,11 @@ func (ing *Ingestor) generateTraceID() string {
 }
 
 // GetMetrics returns current ingestion metrics.
-func (ing *Ingestor) GetMetrics() IngestorMetrics {
+func (ing *Ingestor) GetMetrics() IngestorMetricsSnapshot {
 	ing.metrics.mu.Lock()
 	defer ing.metrics.mu.Unlock()
 
-	// Copy metrics
-	m := IngestorMetrics{
+	m := IngestorMetricsSnapshot{
 		TotalReceived:    ing.metrics.TotalReceived,
 		TotalProcessed:   ing.metrics.TotalProcessed,
 		TotalFailed:      ing.metrics.TotalFailed,
