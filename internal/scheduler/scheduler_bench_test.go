@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -83,5 +84,48 @@ func BenchmarkScheduler_GetMetrics(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		sched.GetMetrics()
+	}
+}
+
+func BenchmarkRateLimiter_Allow(b *testing.B) {
+	rl := NewRateLimiter(RateLimitConfig{DefaultRate: 360000, DefaultBurst: 1000})
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		rl.Allow("bench-ns")
+		rl.Release("bench-ns")
+	}
+}
+
+func BenchmarkRateLimiter_MultiNamespace(b *testing.B) {
+	rl := NewRateLimiter(RateLimitConfig{DefaultRate: 360000, DefaultBurst: 100})
+	ns := []string{"ns-1", "ns-2", "ns-3", "ns-4", "ns-5"}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		rl.Allow(ns[i%5])
+		rl.Release(ns[i%5])
+	}
+}
+
+func BenchmarkDependencyResolver_TopologicalSort(b *testing.B) {
+	dr := NewDependencyResolver(nil, zerolog.Nop())
+	ids := make([]string, 20)
+	for i := 0; i < 20; i++ {
+		ids[i] = fmt.Sprintf("job-%d", i)
+		if i > 0 {
+			dr.RegisterJob(&models.Job{
+				ID:           ids[i],
+				Dependencies: &models.DependencyConfig{DependsOn: []string{ids[i-1]}},
+			})
+		}
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		dr.TopologicalOrder(ids)
 	}
 }
