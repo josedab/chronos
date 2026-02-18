@@ -1,0 +1,23 @@
+{
+  "name": "@chronos/sdk",
+  "version": "0.1.0",
+  "description": "JavaScript/TypeScript SDK for the Chronos distributed cron system",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test src/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["chronos", "cron", "scheduler", "distributed", "job-scheduling"],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chronos/chronos.git",
+    "directory": "sdks/javascript"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}
