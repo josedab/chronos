@@ -4,6 +4,9 @@ import { getClusterStatus, getJobs, getAllExecutions, enableJob, disableJob } fr
 import { format, formatDistanceToNow } from 'date-fns'
 import { useState, useEffect, useMemo } from 'react'
 import JobDependencyGraph from '../components/JobDependencyGraph'
+import FailureHeatmap from '../components/FailureHeatmap'
+import SLOBurnRate from '../components/SLOBurnRate'
+import OneClickRetry from '../components/OneClickRetry'
 import type { Job } from '../types'
 
 type TimeRange = '1h' | '24h' | '7d' | '30d'
@@ -346,6 +349,17 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Observability Row: Failure Heatmap + SLO Burn Rate */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <FailureHeatmap executions={recentExecutions} />
+        <SLOBurnRate
+          target={0.999}
+          totalExecutions={stats.successCount + stats.failedCount}
+          failedExecutions={stats.failedCount}
+          windowLabel={timeRange}
+        />
+      </div>
+
       {/* Two-column layout for lists */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Executions */}
@@ -378,9 +392,12 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(exec.status)}`}>
-                      {exec.status}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(exec.status)}`}>
+                        {exec.status}
+                      </span>
+                      <OneClickRetry execution={exec} />
+                    </div>
                   </div>
                 )
               })

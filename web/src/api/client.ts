@@ -142,3 +142,12 @@ export async function triggerJobWithParams(id: string, params?: TriggerParams): 
   }
   return data.data
 }
+
+// Replay execution (re-run a specific failed execution)
+export async function replayExecution(jobId: string, executionId: string): Promise<Execution> {
+  const { data } = await api.post<ApiResponse<Execution>>(`/jobs/${jobId}/executions/${executionId}/replay`)
+  if (!data.success || !data.data) {
+    throw new Error(data.error?.message || 'Failed to replay execution')
+  }
+  return data.data
+}
