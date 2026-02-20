@@ -1,6 +1,14 @@
-# Chronos Grafana Dashboard
+# Chronos Grafana Dashboards
 
-This directory contains a pre-built Grafana dashboard for monitoring Chronos.
+This directory contains pre-built Grafana dashboards for monitoring Chronos.
+
+## Available Dashboards
+
+| Dashboard | File | Description |
+|-----------|------|-------------|
+| **Job Execution Overview** | `dashboard.json` | Jobs, executions, success rate, duration percentiles |
+| **Cluster Health** | `cluster-health.json` | Raft leader status, peers, leader changes |
+| **Dispatcher Performance** | `dispatcher-performance.json` | Execution rate, latency heatmap, top failing jobs |
 
 ## Installation
 

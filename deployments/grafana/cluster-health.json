@@ -1,0 +1,65 @@
+{
+  "__inputs": [
+    { "name": "DS_PROMETHEUS", "type": "datasource", "pluginId": "prometheus" }
+  ],
+  "title": "Chronos Cluster Health",
+  "uid": "chronos-cluster-health",
+  "tags": ["chronos", "cluster", "raft"],
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": "Raft Leader Status",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "chronos_raft_is_leader", "legendFormat": "{{instance}}" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "Follower", "color": "orange" }, "1": { "text": "Leader", "color": "green" } } }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Cluster Peers",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "chronos_raft_peers", "legendFormat": "peers" }]
+    },
+    {
+      "title": "Total Jobs",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [{ "expr": "chronos_jobs_total", "legendFormat": "total" }]
+    },
+    {
+      "title": "Enabled Jobs",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [{ "expr": "chronos_jobs_enabled", "legendFormat": "enabled" }]
+    },
+    {
+      "title": "Leader Changes Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [{ "expr": "changes(chronos_raft_is_leader[5m])", "legendFormat": "{{instance}}" }]
+    },
+    {
+      "title": "Jobs by Status",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        { "expr": "chronos_jobs_enabled", "legendFormat": "enabled" },
+        { "expr": "chronos_jobs_total - chronos_jobs_enabled", "legendFormat": "disabled" }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      { "name": "instance", "type": "query", "query": "label_values(chronos_raft_is_leader, instance)" }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "schemaVersion": 39
+}

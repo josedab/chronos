@@ -1,0 +1,27 @@
+{
+  "name": "Chronos Distributed Cron",
+  "description": "Monitoring dashboards for Chronos distributed cron system. Includes job execution overview, cluster health, and dispatcher performance.",
+  "version": "0.1.0",
+  "author": "Chronos Team",
+  "datasources": ["prometheus"],
+  "dashboards": [
+    {
+      "name": "Job Execution Overview",
+      "file": "dashboard.json",
+      "description": "Jobs, executions, success rate, and duration percentiles"
+    },
+    {
+      "name": "Cluster Health",
+      "file": "cluster-health.json",
+      "description": "Raft leader status, peers, and leader change history"
+    },
+    {
+      "name": "Dispatcher Performance",
+      "file": "dispatcher-performance.json",
+      "description": "Execution rate, latency heatmap, and top failing jobs"
+    }
+  ],
+  "keywords": ["chronos", "cron", "scheduler", "distributed", "raft"],
+  "homepage": "https://github.com/chronos/chronos",
+  "repository": "https://github.com/chronos/chronos"
+}

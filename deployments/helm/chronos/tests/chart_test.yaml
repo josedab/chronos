@@ -1,0 +1,31 @@
+suite: chronos chart tests
+templates:
+  - configmap.yaml
+  - service.yaml
+  - statefulset.yaml
+  - pdb.yaml
+  - serviceaccount.yaml
+tests:
+  - it: should render configmap
+    template: configmap.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+  - it: should render service with correct ports
+    template: service.yaml
+    asserts:
+      - isKind:
+          of: Service
+  - it: should render statefulset with 3 replicas
+    template: statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 3
+  - it: should render pdb
+    template: pdb.yaml
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
