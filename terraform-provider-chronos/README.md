@@ -14,7 +14,7 @@ terraform {
   required_providers {
     chronos = {
       source  = "chronos/chronos"
-      version = "~> 1.0"
+      version = "~> 0.1"
     }
   }
 }

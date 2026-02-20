@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	fwpath "github.com/hashicorp/terraform-plugin-framework/path"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -295,14 +296,5 @@ func (r *JobResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 
 // ImportState imports an existing resource.
 func (r *JobResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
-}
-
-// path is imported from terraform-plugin-framework
-var path = struct {
-	Root func(string) interface{}
-}{
-	Root: func(name string) interface{} {
-		return nil // Simplified for this implementation
-	},
+	resource.ImportStatePassthroughID(ctx, fwpath.Root("id"), req, resp)
 }
