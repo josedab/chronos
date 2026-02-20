@@ -1,0 +1,38 @@
+# Chronos Cloud - fly.io configuration
+# Deploy: fly launch --config deployments/cloud/fly.toml
+
+app = "chronos-cloud"
+primary_region = "iad"
+
+[build]
+  dockerfile = "../../deployments/docker/Dockerfile"
+
+[env]
+  CHRONOS_NODE_ID = "cloud-1"
+  CHRONOS_DATA_DIR = "/var/lib/chronos"
+  CHRONOS_LOG_LEVEL = "info"
+  CHRONOS_LOG_FORMAT = "json"
+  CHRONOS_CLOUD_ENABLED = "true"
+  CHRONOS_CLOUD_FREE_TIER_JOBS = "5"
+  CHRONOS_CLOUD_FREE_TIER_EXECUTIONS = "100"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
+
+[mounts]
+  source = "chronos_data"
+  destination = "/var/lib/chronos"

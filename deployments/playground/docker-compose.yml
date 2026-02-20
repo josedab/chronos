@@ -1,0 +1,66 @@
+# Chronos Playground
+#
+# Start a fully configured Chronos instance with demo jobs:
+#   docker compose up
+#
+# Access:
+#   Web UI:  http://localhost:8080
+#   API:     http://localhost:8080/api/v1/jobs
+#   Metrics: http://localhost:8080/metrics
+
+services:
+  chronos:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+    ports:
+      - "8080:8080"
+      - "7000:7000"
+    volumes:
+      - chronos-data:/var/lib/chronos
+    environment:
+      - CHRONOS_NODE_ID=playground-1
+      - CHRONOS_DATA_DIR=/var/lib/chronos
+      - CHRONOS_LOG_LEVEL=info
+      - CHRONOS_LOG_FORMAT=text
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # Echo webhook server for demo jobs
+  echo:
+    image: hashicorp/http-echo:0.2.3
+    command: ["-text", '{"status":"ok","echo":true}']
+    ports:
+      - "9090:5678"
+
+  # Seed demo jobs after Chronos starts
+  seed:
+    image: curlimages/curl:8.5.0
+    depends_on:
+      chronos:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        echo "Seeding demo jobs..."
+        curl -s -X POST http://chronos:8080/api/v1/jobs \
+          -H "Content-Type: application/json" \
+          -d '{"name":"hello-world","schedule":"* * * * *","webhook":{"url":"http://echo:5678/hello","method":"GET"},"enabled":true}'
+        echo ""
+        curl -s -X POST http://chronos:8080/api/v1/jobs \
+          -H "Content-Type: application/json" \
+          -d '{"name":"daily-report","schedule":"0 9 * * *","webhook":{"url":"http://echo:5678/report","method":"POST","body":"{\"type\":\"daily\"}"},"retry_policy":{"max_attempts":3,"initial_interval":"1s","multiplier":2},"timeout":"5m","enabled":true}'
+        echo ""
+        curl -s -X POST http://chronos:8080/api/v1/jobs \
+          -H "Content-Type: application/json" \
+          -d '{"name":"cleanup","schedule":"0 */6 * * *","webhook":{"url":"http://echo:5678/cleanup","method":"POST"},"timeout":"10m","enabled":true}'
+        echo ""
+        echo "Demo jobs created! Visit http://localhost:8080"
+
+volumes:
+  chronos-data:
