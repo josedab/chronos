@@ -42,6 +42,10 @@ linters-settings:
   govet:
     check-shadowing: true
     enable-all: true
+    settings:
+      copylocks:
+        # Detect mutex and atomic value copies
+        enable: true
   gofmt:
     simplify: true
   misspell:
