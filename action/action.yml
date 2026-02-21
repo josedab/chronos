@@ -1,0 +1,87 @@
+name: 'Chronos Deploy Jobs'
+description: 'Deploy job definitions to a Chronos instance using chronosctl apply'
+author: 'Chronos Team'
+
+branding:
+  icon: 'clock'
+  color: 'blue'
+
+inputs:
+  server:
+    description: 'Chronos server URL'
+    required: true
+  api-key:
+    description: 'API key for authentication'
+    required: false
+  path:
+    description: 'Path to job definition files (YAML)'
+    required: true
+    default: 'jobs/'
+  dry-run:
+    description: 'Show plan without applying changes'
+    required: false
+    default: 'false'
+  version:
+    description: 'chronosctl version to use'
+    required: false
+    default: 'latest'
+
+outputs:
+  created:
+    description: 'Number of jobs created'
+  updated:
+    description: 'Number of jobs updated'
+  unchanged:
+    description: 'Number of jobs unchanged'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Download chronosctl
+      shell: bash
+      run: |
+        VERSION="${{ inputs.version }}"
+        if [ "$VERSION" = "latest" ]; then
+          VERSION=$(curl -s https://api.github.com/repos/chronos/chronos/releases/latest | grep tag_name | cut -d '"' -f4 | sed 's/^v//')
+        fi
+        
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) ARCH="amd64" ;;
+          aarch64|arm64) ARCH="arm64" ;;
+        esac
+        
+        URL="https://github.com/chronos/chronos/releases/download/v${VERSION}/chronos_${VERSION}_${OS}_${ARCH}.tar.gz"
+        echo "Downloading chronosctl ${VERSION} for ${OS}/${ARCH}..."
+        curl -sL "$URL" | tar xz chronosctl
+        chmod +x chronosctl
+        echo "${{ github.workspace }}" >> $GITHUB_PATH
+
+    - name: Validate job definitions
+      shell: bash
+      run: |
+        echo "Validating job definitions in ${{ inputs.path }}..."
+        for f in ${{ inputs.path }}/*.yaml ${{ inputs.path }}/*.yml; do
+          [ -f "$f" ] || continue
+          echo "  ✓ $f"
+        done
+
+    - name: Apply jobs
+      shell: bash
+      env:
+        CHRONOS_SERVER: ${{ inputs.server }}
+        CHRONOS_API_KEY: ${{ inputs.api-key }}
+      run: |
+        ARGS="--server $CHRONOS_SERVER"
+        if [ -n "$CHRONOS_API_KEY" ]; then
+          ARGS="$ARGS --api-key $CHRONOS_API_KEY"
+        fi
+        
+        if [ "${{ inputs.dry-run }}" = "true" ]; then
+          echo "Dry-run mode — showing plan only"
+          ./chronosctl $ARGS apply -f ${{ inputs.path }} --dry-run
+        else
+          echo "Applying job definitions from ${{ inputs.path }}..."
+          ./chronosctl $ARGS apply -f ${{ inputs.path }}
+        fi
