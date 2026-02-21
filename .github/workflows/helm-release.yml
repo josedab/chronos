@@ -1,0 +1,36 @@
+name: Helm Chart Release
+
+on:
+  push:
+    tags:
+      - 'helm-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Package chart
+        run: |
+          helm package deployments/helm/chronos -d .helm-release/
+
+      - name: Generate index
+        run: |
+          helm repo index .helm-release/ --url https://chronos.github.io/charts
+
+      - name: Upload chart artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: .helm-release/

@@ -1,0 +1,34 @@
+name: Chaos Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  chaos:
+    name: Chaos & Resilience Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run chaos tests
+        run: |
+          cd e2e
+          go test -run "TestChaos" -v -count=1 -timeout 300s -race
+
+      - name: Run cluster failover tests
+        run: |
+          cd e2e
+          go test -run "TestCluster" -v -count=1 -timeout 300s
+
+      - name: Run full E2E suite
+        run: |
+          cd e2e
+          go test -v -count=1 -timeout 300s

@@ -1,0 +1,24 @@
+labels: [feature-request]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please describe what you'd like to see.
+  - type: textarea
+    attributes:
+      label: Feature Description
+      description: What problem would this feature solve?
+      placeholder: "I'd like Chronos to..."
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed Solution
+      description: How do you envision this working?
+  - type: dropdown
+    attributes:
+      label: Priority
+      options:
+        - Nice to have
+        - Important
+        - Critical

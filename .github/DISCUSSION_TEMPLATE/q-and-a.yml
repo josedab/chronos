@@ -1,0 +1,15 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask anything about Chronos — installation, configuration, architecture, or usage.
+  - type: textarea
+    attributes:
+      label: Question
+      description: What would you like to know?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Context
+      description: Any relevant details (OS, version, config, logs)?
