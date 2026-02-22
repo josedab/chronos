@@ -1,0 +1,31 @@
+# Example job definitions for use with chronosctl apply or the GitHub Action
+apiVersion: chronos/v1
+kind: Job
+metadata:
+  name: health-check
+  namespace: production
+spec:
+  schedule: "*/5 * * * *"
+  webhook:
+    url: https://api.example.com/health
+    method: GET
+  timeout: "30s"
+  enabled: true
+---
+apiVersion: chronos/v1
+kind: Job
+metadata:
+  name: daily-report
+  namespace: production
+spec:
+  schedule: "0 9 * * *"
+  timezone: America/New_York
+  webhook:
+    url: https://api.example.com/reports/generate
+    method: POST
+  retry:
+    maxAttempts: 3
+    initialInterval: "5s"
+    multiplier: 2.0
+  timeout: "10m"
+  enabled: true

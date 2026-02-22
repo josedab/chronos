@@ -1,0 +1,44 @@
+# Example: Deploy Chronos Jobs on Push
+#
+# Copy this workflow to .github/workflows/deploy-jobs.yml in your repository.
+# Create a `jobs/` directory with YAML job definitions.
+
+name: Deploy Chronos Jobs
+
+on:
+  push:
+    branches: [main]
+    paths: ['jobs/**']
+  pull_request:
+    branches: [main]
+    paths: ['jobs/**']
+
+jobs:
+  # On PRs: show what would change (dry-run)
+  preview:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preview job changes
+        uses: chronos/chronos/action@v0.1
+        with:
+          server: ${{ vars.CHRONOS_URL }}
+          api-key: ${{ secrets.CHRONOS_API_KEY }}
+          path: jobs/
+          dry-run: 'true'
+
+  # On push to main: apply changes
+  deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy jobs
+        uses: chronos/chronos/action@v0.1
+        with:
+          server: ${{ vars.CHRONOS_URL }}
+          api-key: ${{ secrets.CHRONOS_API_KEY }}
+          path: jobs/
