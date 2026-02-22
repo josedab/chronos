@@ -2,10 +2,11 @@
 
 **Distributed Cron System** - Reliable job scheduling without operational complexity.
 
-[![Go Version](https://img.shields.io/badge/go-1.22+-blue.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-1.24+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/chronos/chronos/actions/workflows/ci.yml/badge.svg)](https://github.com/chronos/chronos/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/chronos/chronos/branch/main/graph/badge.svg)](https://codecov.io/gh/chronos/chronos)
+[![Release](https://img.shields.io/github/v/release/chronos/chronos)](https://github.com/chronos/chronos/releases)
+[![Terraform Registry](https://img.shields.io/badge/terraform-registry-blueviolet)](https://registry.terraform.io/providers/chronos/chronos)
 [![Go Report Card](https://goreportcard.com/badge/github.com/chronos/chronos)](https://goreportcard.com/report/github.com/chronos/chronos)
 
 ## Overview
@@ -16,32 +17,14 @@ Chronos is a distributed cron system that provides reliable job scheduling with:
 - **Distributed consensus** - Raft-based leader election using hashicorp/raft
 - **At-least-once execution** - Jobs run even during node failures
 - **HTTP webhook dispatch** - Language-agnostic job execution
-- **Built-in observability** - Prometheus metrics, structured logging, Web UI
+- **Built-in observability** - Prometheus metrics, OpenTelemetry tracing, Web UI
+- **RBAC & SSO** - OIDC authentication, role-based access control, namespace isolation
+- **DAG workflows** - Job dependencies with fan-out/fan-in execution
+- **Infrastructure-as-Code** - Terraform provider, Pulumi SDK, Kubernetes Operator
+- **Migration tooling** - Import from crontab, K8s CronJobs, and Airflow DAGs
 
-### Next-Gen Features (Experimental)
-
-> ⚠️ **Note**: The features listed below are experimental and under active development.
-> They are scaffolded but not yet integrated into the main application. Use at your own risk
-> in production environments. APIs may change without notice.
-
-- **🌐 Cross-Region Federation** - Multi-cluster synchronization with conflict resolution
-- **🔌 Multi-Protocol Dispatch** - gRPC, Kafka, NATS, RabbitMQ in addition to HTTP
-- **🧠 AI Schedule Optimization** - Anomaly detection and optimal timing recommendations
-- **🎨 Visual Workflow Builder** - DAG-based job orchestration with 12 node types
-- **📜 Policy-as-Code** - Declarative governance rules with 16 operators
-- **⏪ Time-Travel Debugging** - Step through execution history with breakpoints
-- **📦 Job Marketplace** - 15+ production-ready templates
-- **👥 Real-Time Collaboration** - Live cursors, presence, and edit sync
-- **📱 Mobile Support** - Push notifications and mobile-optimized APIs
-- **☁️ Cloud Platform** - Multi-tenant control plane with billing
-- **🤖 AI Assistant** - Natural language job creation and optimization
-- **📈 Predictive Autoscaling** - Automatic scaling based on job patterns
-- **🔐 Secret Management** - Vault and cloud provider secret injection
-- **🔍 Semantic Search** - Natural language job discovery
-- **🧪 Chaos Engineering** - Built-in fault injection testing
-- **📊 OpenTelemetry** - Distributed tracing integration
-- **🔄 GitOps** - Git-based job configuration management
-- **🧩 WASM Plugins** - Custom job logic via WebAssembly
+> 📘 See [Experimental Features](docs/EXPERIMENTAL.md) for advanced capabilities under active development
+> including cross-region federation, AI schedule optimization, and more.
 
 ## Quick Start
 
@@ -239,6 +222,15 @@ Chronos exposes Prometheus metrics at `/metrics`:
 ## Contributing
 
 Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
+
+Looking for a place to start? Check out our [Good First Issues](docs/GOOD_FIRST_ISSUES.md).
+
+## Community
+
+- 💬 [GitHub Discussions](https://github.com/chronos/chronos/discussions) — Questions, ideas, show & tell
+- 🐛 [Issue Tracker](https://github.com/chronos/chronos/issues) — Bug reports and feature requests
+- 📋 [Roadmap](ROADMAP.md) — What's planned for future releases
+- 📖 [Documentation](https://chronos.github.io/chronos) — Guides, API reference, SDK docs
 
 ## License
 

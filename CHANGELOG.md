@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-02-22
+
+### Added — Stable Core
+
+- Distributed job scheduling with Raft-based leader election (hashicorp/raft)
+- Embedded BadgerDB storage — zero external dependencies
+- HTTP webhook dispatch with retry policies (exponential backoff)
+- Multi-protocol dispatch: gRPC, Kafka, NATS, RabbitMQ
+- HMAC-SHA256 webhook payload signing and mutual TLS support
+- Webhook response assertions (body matchers, JSON path, timing SLAs)
+- Canary/shadow webhook execution with response comparison
+- DAG workflow engine with fan-out/fan-in and cycle detection
+- Job dependency resolution with topological ordering
+- RBAC with 4 built-in roles (admin, operator, developer, viewer)
+- OIDC/SSO authentication with JWKS RS256 signature verification
+- Namespace-based multi-tenancy with quota enforcement
+- Prometheus metrics and OpenTelemetry distributed tracing
+- W3C traceparent propagation into outbound webhook calls
+- Web UI dashboard with failure heatmaps, SLO burn-rate, one-click retry
+- Terraform provider (6 resources: job, namespace, workflow, dag, trigger, policy)
+- Pulumi SDK and Kubernetes Operator with CRDs
+- CLI tool (`chronosctl`) for job management
+- Declarative job-as-code with `chronosctl apply -f` (YAML)
+- Migration wizard for crontab, K8s CronJobs, and Airflow DAGs
+- Plugin SDK with 5 extension points (Executor, Trigger, Notifier, SecretProvider, Storage)
+- Secret management (Vault, AWS Secrets Manager, GCP Secret Manager, Azure Key Vault)
+- Execution event streaming via EventBus (pub/sub)
+- Alert engine with rules, cooldown, glob-based job filtering
+- Per-namespace rate limiting with token bucket algorithm
+- Cost attribution engine with budgets and threshold alerts
+- Cloud platform onboarding with self-serve signup and API key generation
+- Docker image and Helm chart support
+- Comprehensive E2E tests including 3-node Raft cluster failover
+
+### Added — Experimental (see docs/EXPERIMENTAL.md)
+
 ### Added
 
 #### Managed Cloud Platform (`pkg/cloud`)
