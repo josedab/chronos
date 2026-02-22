@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /chronos ./cmd/chronos
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /chronosctl ./cmd/chronosctl
 
 # Final stage
-FROM alpine:3.19
+FROM alpine:3.23
 
 RUN apk add --no-cache ca-certificates tzdata
 
