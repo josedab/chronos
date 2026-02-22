@@ -67,6 +67,6 @@ jobs:
           helm package deployments/helm/chronos -d .cr-release-packages
 
       - name: Upload chart to GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: .cr-release-packages/*.tgz
